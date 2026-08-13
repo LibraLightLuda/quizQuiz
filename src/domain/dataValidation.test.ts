@@ -9,8 +9,8 @@ describe('언어 데이터', () => {
       expect(koreanWords.filter((word) => word.difficulty === difficulty).length).toBeGreaterThanOrEqual(30);
       expect(englishWords.filter((word) => word.difficulty === difficulty).length).toBeGreaterThanOrEqual(30);
     }
-    expect(koreanWords.length).toBeGreaterThanOrEqual(180);
-    expect(englishWords.length).toBeGreaterThanOrEqual(180);
+    expect(koreanWords.length).toBeGreaterThanOrEqual(120);
+    expect(englishWords.length).toBeGreaterThanOrEqual(120);
   });
 
   it('ID, 단어, 마스크 범위가 유효하다', () => {
@@ -46,10 +46,10 @@ describe('언어 데이터', () => {
       easy: [2, 3], normal: [2, 4], hard: [3, 5], challenge: [3, 6]
     };
     const englishLengths: Record<(typeof DIFFICULTIES)[number], readonly [number, number]> = {
-      sprout: [3, 4], easy: [3, 5], normal: [4, 7], hard: [5, 9], challenge: [6, 12]
+      easy: [3, 5], normal: [4, 7], hard: [5, 9], challenge: [6, 12]
     };
     const maskLengths: Record<(typeof DIFFICULTIES)[number], readonly number[]> = {
-      sprout: [1], easy: [1], normal: [1, 2], hard: [2], challenge: [2, 3]
+      easy: [1], normal: [1, 2], hard: [2], challenge: [2, 3]
     };
 
     for (const word of koreanWords) {
@@ -63,9 +63,6 @@ describe('언어 데이터', () => {
       expect(word.word.length).toBeGreaterThanOrEqual(bounds[0]);
       expect(word.word.length).toBeLessThanOrEqual(bounds[1]);
       word.maskRanges.forEach((range) => expect(maskLengths[word.difficulty]).toContain(range.length));
-      if (word.difficulty === 'sprout') {
-        word.maskRanges.forEach((range) => expect('aeiou').toContain(word.word[range.start]));
-      }
     }
   });
 });

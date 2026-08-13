@@ -13,23 +13,29 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 const subjects: Subject[] = ['math', 'korean', 'english'];
-const modes: Mode[] = ['math-add', 'math-subtract', 'math-multiply', 'ko-fill', 'ko-listen', 'en-fill', 'en-listen'];
+const modes: Mode[] = ['math-add', 'math-subtract', 'math-multiply', 'math-mixed', 'ko-fill', 'ko-listen', 'en-fill', 'en-listen'];
 
 const modeMatchesSubject = (mode: Mode, subject: Subject): boolean =>
   (subject === 'math' && mode.startsWith('math-'))
   || (subject === 'korean' && mode.startsWith('ko-'))
   || (subject === 'english' && mode.startsWith('en-'));
 
-const isConfig = (value: unknown): value is SessionConfig => {
-  if (!value || typeof value !== 'object') return false;
+const normalizeConfig = (value: unknown): SessionConfig | null => {
+  if (!value || typeof value !== 'object') return null;
   const config = value as Partial<SessionConfig>;
-  return subjects.includes(config.subject as Subject)
-    && modes.includes(config.mode as Mode)
-    && modeMatchesSubject(config.mode as Mode, config.subject as Subject)
-    && ['sprout', 'easy', 'normal', 'hard', 'challenge'].includes(config.difficulty ?? '')
-    && [5, 10, 20].includes(config.length ?? 0)
-    && ['untimed', 'relaxed', 'normal', 'fast'].includes(config.pace ?? '');
+  const difficulty = (value as { difficulty?: string }).difficulty;
+  if (!subjects.includes(config.subject as Subject)
+    || !modes.includes(config.mode as Mode)
+    || !modeMatchesSubject(config.mode as Mode, config.subject as Subject)
+    || !['sprout', 'easy', 'normal', 'hard', 'challenge'].includes(difficulty ?? '')) return null;
+  return {
+    subject: config.subject as Subject,
+    mode: config.mode as Mode,
+    difficulty: difficulty === 'sprout' ? 'easy' : difficulty as SessionConfig['difficulty']
+  };
 };
+
+const isConfig = (value: unknown): value is SessionConfig => normalizeConfig(value) !== null;
 
 const isNonNegativeInteger = (value: unknown): value is number =>
   typeof value === 'number' && Number.isInteger(value) && value >= 0;
@@ -39,6 +45,7 @@ const isSummary = (value: unknown): value is SessionSummary => {
   const summary = value as Partial<SessionSummary>;
   if (typeof summary.id !== 'string' || !summary.id.trim() || typeof summary.completedAt !== 'string') return false;
   if (Number.isNaN(Date.parse(summary.completedAt)) || !isConfig(summary.config)) return false;
+  summary.config = normalizeConfig(summary.config)!;
   if (!isNonNegativeInteger(summary.correctCount) || !isNonNegativeInteger(summary.incorrectCount)
     || !isNonNegativeInteger(summary.timeoutCount) || !isNonNegativeInteger(summary.totalCount)) return false;
   if (summary.totalCount < 1 || summary.correctCount + summary.incorrectCount + summary.timeoutCount !== summary.totalCount) return false;
@@ -56,7 +63,7 @@ export const loadSettings = (): Settings => {
       sound: typeof parsed.sound === 'boolean' ? parsed.sound : true,
       tts: typeof parsed.tts === 'boolean' ? parsed.tts : true,
       animations: typeof parsed.animations === 'boolean' ? parsed.animations : true,
-      lastConfig: isConfig(parsed.lastConfig) ? parsed.lastConfig : DEFAULT_CONFIG
+      lastConfig: normalizeConfig(parsed.lastConfig) ?? DEFAULT_CONFIG
     };
   } catch {
     return DEFAULT_SETTINGS;

@@ -15,7 +15,6 @@ const assertQuestion = (question: Question) => {
 
 const assertMathRange = (mode: 'math-add' | 'math-subtract' | 'math-multiply', difficulty: Difficulty, operands: number[], answer: number) => {
   if (mode === 'math-add') {
-    if (difficulty === 'sprout') { expect(operands).toHaveLength(2); expect(Math.max(...operands)).toBeLessThanOrEqual(9); expect(answer).toBeLessThanOrEqual(10); }
     if (difficulty === 'easy') { expect(Math.max(...operands)).toBeLessThanOrEqual(20); expect(answer).toBeLessThanOrEqual(30); }
     if (difficulty === 'normal') operands.forEach((value) => expect(value).toBeGreaterThanOrEqual(10));
     if (difficulty === 'normal') operands.forEach((value) => expect(value).toBeLessThanOrEqual(99));
@@ -24,13 +23,11 @@ const assertMathRange = (mode: 'math-add' | 'math-subtract' | 'math-multiply', d
     if (difficulty === 'challenge' && operands.length === 3) operands.forEach((value) => { expect(value).toBeGreaterThanOrEqual(1); expect(value).toBeLessThanOrEqual(99); });
   }
   if (mode === 'math-subtract') {
-    const maximum: Record<Difficulty, number> = { sprout: 10, easy: 30, normal: 99, hard: 299, challenge: 999 };
+    const maximum: Record<Difficulty, number> = { easy: 30, normal: 99, hard: 299, challenge: 999 };
     expect(operands[0]).toBeGreaterThanOrEqual(operands[1]);
     operands.forEach((value) => expect(value).toBeLessThanOrEqual(maximum[difficulty]));
-    if (difficulty === 'sprout' && operands[0] === 10) expect([0, 10]).toContain(operands[1]);
   }
   if (mode === 'math-multiply') {
-    if (difficulty === 'sprout') { expect([1, 2, 5]).toContain(operands[0]); expect(operands[1]).toBeLessThanOrEqual(5); }
     if (difficulty === 'easy') { expect([2, 3, 4, 5, 10]).toContain(operands[0]); expect(operands[1]).toBeLessThanOrEqual(9); }
     if (difficulty === 'normal') operands.forEach((value) => { expect(value).toBeGreaterThanOrEqual(2); expect(value).toBeLessThanOrEqual(9); });
     if (difficulty === 'hard') { expect(operands[0]).toBeLessThanOrEqual(20); expect(operands[1]).toBeLessThanOrEqual(9); }
@@ -64,6 +61,18 @@ describe('수학 문제 생성기', () => {
       });
     }
   }
+
+  it('사칙연산 모드는 덧셈·뺄셈·곱셈을 모두 출제한다', () => {
+    const random = new SeededRandom(20260814);
+    const operations = new Set<string>();
+    for (let index = 0; index < 200; index += 1) {
+      const question = generateMathQuestion({ mode: 'math-mixed', difficulty: 'normal', recentSignatures: [], random });
+      assertQuestion(question);
+      operations.add(String(question.metadata?.operation));
+      expect(question.mode).toBe('math-mixed');
+    }
+    expect(operations).toEqual(new Set(['math-add', 'math-subtract', 'math-multiply']));
+  });
 
   it('같은 seed는 같은 문제 내용 순서를 만든다', () => {
     const make = () => {

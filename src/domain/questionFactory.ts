@@ -12,7 +12,7 @@ export const generateQuestion = (
 ): Question => {
   if (config.subject === 'math') {
     return generateMathQuestion({
-      mode: config.mode as 'math-add' | 'math-subtract' | 'math-multiply',
+      mode: config.mode as 'math-add' | 'math-subtract' | 'math-multiply' | 'math-mixed',
       difficulty: config.difficulty,
       recentSignatures,
       recentAnswers,

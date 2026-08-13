@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { appReducer, createInitialState } from './appReducer';
-import { difficultyInfo, DIFFICULTIES, modeInfo, modesForSubject, paceInfo, subjectInfo } from '../domain/difficulty';
-import type { Difficulty, Mode, Pace, Question, SessionLength, SessionSummary, Settings, Subject } from '../domain/types';
+import { difficultyInfo, DIFFICULTIES, modeInfo, modesForSubject, QUESTION_TIME_MS, QUESTION_TIME_SECONDS, SESSION_LENGTH, subjectInfo } from '../domain/difficulty';
+import type { Mode, Question, SessionSummary, Settings, Subject } from '../domain/types';
 import { generateQuestion } from '../domain/questionFactory';
 import { listeningFallbackMode } from '../domain/languageGenerator';
 import { CryptoRandom, shuffle } from '../services/randomService';
@@ -30,12 +30,7 @@ const makeMessagePicker = (values: readonly string[]) => {
 const pickPraise = makeMessagePicker(praiseMessages);
 const pickGentle = makeMessagePicker(gentleMessages);
 
-const feedbackDelay = (pace: Pace, correct: boolean): number => {
-  const values: Record<Pace, readonly [number, number]> = {
-    untimed: [1000, 1300], relaxed: [1000, 1300], normal: [850, 1150], fast: [650, 950]
-  };
-  return values[pace][correct ? 0 : 1];
-};
+const feedbackDelay = (correct: boolean): number => correct ? 500 : 650;
 
 const subjectForMode = (mode: Mode): Subject => modeInfo[mode].subject;
 
@@ -48,6 +43,7 @@ function App() {
   const [speechState, setSpeechState] = useState<'idle' | 'speaking' | 'error'>('idle');
   const [storageWarning, setStorageWarning] = useState(false);
   const [generationError, setGenerationError] = useState('');
+  const [typedAnswer, setTypedAnswer] = useState('');
   const [reducedMotion, setReducedMotion] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
   );
@@ -80,6 +76,7 @@ function App() {
     inputLock.current = false;
     announcedTimerThresholds.current.clear();
     setTimerAnnouncement('');
+    setTypedAnswer('');
     speechRequestToken.current += 1;
     speechLock.current = false;
     activeSpeechQuestion.current = null;
@@ -87,12 +84,6 @@ function App() {
     setSpeechState('idle');
     if (state.session?.currentQuestion.id) questionHeading.current?.focus();
   }, [state.session?.currentQuestion.id]);
-
-  const getLimit = useCallback((question: Question, pace: Pace): number | null => {
-    const info = paceInfo[pace];
-    const seconds = question.kind === 'listening' ? info.listeningSeconds : info.seconds;
-    return seconds === null ? null : seconds * 1000;
-  }, []);
 
   const playSpeech = useCallback(async (question: Question) => {
     if (!question.speech || !state.settings.tts || !speechSupported()) {
@@ -127,13 +118,12 @@ function App() {
       if (session.currentQuestion.kind === 'listening') await playSpeech(session.currentQuestion);
       if (cancelled) return;
       dispatch({
-        type: 'READY', questionId: session.currentQuestion.id, now: performance.now(),
-        limitMs: getLimit(session.currentQuestion, session.config.pace)
+        type: 'READY', questionId: session.currentQuestion.id, now: performance.now()
       });
     };
     void ready();
     return () => { cancelled = true; };
-  }, [getLimit, playSpeech, state.session]);
+  }, [playSpeech, state.session]);
 
   useEffect(() => {
     const session = state.session;
@@ -185,7 +175,7 @@ function App() {
     const timer = window.setTimeout(() => {
       if (advancedQuestions.current.has(questionId)) return;
       advancedQuestions.current.add(questionId);
-      const isLast = session.answers.length >= session.config.length;
+      const isLast = session.answers.length >= SESSION_LENGTH;
       if (isLast) {
         const correctCount = session.answers.filter((answer) => answer.resolution === 'correct').length;
         const incorrectCount = session.answers.filter((answer) => answer.resolution === 'incorrect').length;
@@ -214,7 +204,7 @@ function App() {
         setGenerationError('이 단계의 문제를 준비하지 못했어요. 다른 단계를 골라 주세요.');
         dispatch({ type: 'SESSION_ERROR' });
       }
-    }, feedbackDelay(session.config.pace, session.resolution === 'correct'));
+    }, feedbackDelay(session.resolution === 'correct'));
     return () => window.clearTimeout(timer);
   }, [showExit, showResume, state.history, state.session, state.settings.sound]);
 
@@ -254,6 +244,24 @@ function App() {
     dispatch({
       type: 'RESOLVE', questionId: session.currentQuestion.id, optionId, now: performance.now(),
       praise: pickPraise(), gentle: pickGentle()
+    });
+  };
+
+  const submitTypedAnswer = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const session = state.session;
+    const submitted = typedAnswer.trim().normalize('NFC').toLocaleLowerCase();
+    if (!session || session.config.difficulty !== 'challenge' || !submitted
+      || session.questionStatus !== 'answering' || session.paused || inputLock.current) return;
+    const correctOption = session.currentQuestion.options.find(
+      (option) => option.id === session.currentQuestion.correctOptionId
+    );
+    const expected = String(correctOption?.value ?? '').trim().normalize('NFC').toLocaleLowerCase();
+    inputLock.current = true;
+    dispatch({
+      type: 'RESOLVE', questionId: session.currentQuestion.id,
+      optionId: submitted === expected ? session.currentQuestion.correctOptionId : null,
+      now: performance.now(), praise: pickPraise(), gentle: pickGentle()
     });
   };
 
@@ -374,16 +382,14 @@ function App() {
           <div className="difficulty-grid" role="radiogroup" aria-label="난이도">
             {DIFFICULTIES.map((difficulty) => {
               const info = difficultyInfo[difficulty];
-              return <ChoiceChip key={difficulty} selected={state.draftConfig.difficulty === difficulty} onClick={() => dispatch({ type: 'UPDATE_CONFIG', patch: { difficulty } })} label={info.label} detail={`${info.age} · 보기 ${info.optionCount}개`} />;
+              return <ChoiceChip key={difficulty} selected={state.draftConfig.difficulty === difficulty} onClick={() => dispatch({ type: 'UPDATE_CONFIG', patch: { difficulty } })} label={info.label} detail={`${info.age} · ${difficulty === 'challenge' ? '정답 직접 입력' : `보기 ${info.optionCount}개`}`} />;
             })}
           </div>
-          <SetupGroup title="몇 문제 풀까요?">
-            {([5, 10, 20] as SessionLength[]).map((length) => <ChoiceChip key={length} compact selected={state.draftConfig.length === length} onClick={() => dispatch({ type: 'UPDATE_CONFIG', patch: { length } })} label={`${length}문제`} />)}
-          </SetupGroup>
-          <SetupGroup title="시간은 어떻게 할까요?">
-            {(['untimed', 'relaxed', 'normal', 'fast'] as Pace[]).map((pace) => <ChoiceChip key={pace} compact selected={state.draftConfig.pace === pace} onClick={() => dispatch({ type: 'UPDATE_CONFIG', patch: { pace } })} label={paceInfo[pace].label} />)}
-          </SetupGroup>
-          <div className="start-summary">{difficultyInfo[state.draftConfig.difficulty].label} · {state.draftConfig.length}문제 · {paceInfo[state.draftConfig.pace].label}</div>
+          <section className="fixed-session-info" aria-label="학습 규칙">
+            <div><span aria-hidden="true">✏️</span><small>항상</small><strong>{SESSION_LENGTH}문제</strong></div>
+            <div><span aria-hidden="true">⏱</span><small>문제마다</small><strong>{QUESTION_TIME_SECONDS}초</strong></div>
+          </section>
+          <div className="start-summary">{difficultyInfo[state.draftConfig.difficulty].label} · {SESSION_LENGTH}문제 · 문제마다 {QUESTION_TIME_SECONDS}초</div>
           {generationError && <p className="settings-note warning" role="alert">{generationError}</p>}
           <button className="primary-button" onClick={() => void startSession()}>시작할래요 <span aria-hidden="true">→</span></button>
         </main>
@@ -393,17 +399,18 @@ function App() {
         <main className="screen question-screen">
           <header className="question-header">
             <button className="icon-button" onClick={requestExit} aria-label="학습 나가기">✕</button>
-            <div className="progress-copy"><strong>{subjectInfo[state.session.config.subject].label}</strong><span>{state.session.questionIndex + 1} / {state.session.config.length}</span></div>
-            <div className="progress-track" aria-label={`진행도 ${state.session.questionIndex + 1}/${state.session.config.length}`}><span style={{ width: `${((state.session.questionIndex + 1) / state.session.config.length) * 100}%` }} /></div>
+            <div className="progress-copy"><strong>{subjectInfo[state.session.config.subject].label}</strong><span>{state.session.questionIndex + 1} / {SESSION_LENGTH}</span></div>
+            <div className="progress-track" aria-label={`진행도 ${state.session.questionIndex + 1}/${SESSION_LENGTH}`}><span style={{ width: `${((state.session.questionIndex + 1) / SESSION_LENGTH) * 100}%` }} /></div>
           </header>
           {state.session.limitMs !== null && state.session.questionStatus === 'answering' && (
-            <div className={`timer-pill ${remainingMs !== null && remainingMs <= 5000 ? 'timer-low' : ''}`} aria-label={`남은 시간 ${Math.ceil((remainingMs ?? state.session.limitMs) / 1000)}초`}>
-              <span aria-hidden="true">⏱</span> {Math.ceil((remainingMs ?? state.session.limitMs) / 1000)}초
-              <span className="timer-bar"><i style={{ width: `${Math.max(0, ((remainingMs ?? state.session.limitMs) / state.session.limitMs) * 100)}%` }} /></span>
+            <div className={`timer-card ${remainingMs !== null && remainingMs <= 5000 ? 'timer-low' : ''}`} aria-label={`남은 시간 ${Math.ceil((remainingMs ?? QUESTION_TIME_MS) / 1000)}초`}>
+              <span className="timer-icon" aria-hidden="true">⏱</span>
+              <span className="timer-copy"><small>남은 시간</small><strong>{Math.ceil((remainingMs ?? QUESTION_TIME_MS) / 1000)}초</strong></span>
+              <span className="timer-bar"><i style={{ width: `${Math.max(0, ((remainingMs ?? QUESTION_TIME_MS) / QUESTION_TIME_MS) * 100)}%` }} /></span>
             </div>
           )}
           <section className="question-card">
-            <p className="question-kicker">{state.session.currentQuestion.kind === 'listening' ? '귀를 쫑긋!' : '알맞은 답을 골라요'}</p>
+            <p className="question-kicker">{state.session.currentQuestion.kind === 'listening' ? '귀를 쫑긋!' : state.session.config.difficulty === 'challenge' ? '정답을 직접 써 보세요' : '알맞은 답을 골라요'}</p>
             <h1 ref={questionHeading} tabIndex={-1} className={state.session.currentQuestion.kind === 'math' ? 'math-prompt' : 'word-prompt'}>{state.session.currentQuestion.prompt}</h1>
             {state.session.currentQuestion.hint && <p className="question-hint">{state.session.currentQuestion.hint}</p>}
             {state.session.currentQuestion.kind === 'listening' && (
@@ -413,19 +420,33 @@ function App() {
             )}
             {speechState === 'error' && state.session.currentQuestion.kind === 'listening' && <div className="speech-fallback"><p className="inline-notice">소리가 나지 않나요?</p><button className="small-button" onClick={switchToFillQuestion}>글자 문제로 바꾸기</button></div>}
           </section>
-          <div className={`option-grid options-${state.session.currentQuestion.options.length}`} role="group" aria-label="보기">
-            {state.session.currentQuestion.options.map((option) => {
-              const selected = state.session?.selectedOptionId === option.id;
-              const correct = state.session?.questionStatus === 'feedback' && option.id === state.session.currentQuestion.correctOptionId;
-              const incorrect = state.session?.questionStatus === 'feedback' && selected && !correct;
-              return (
-                <button key={option.id} className={`option-button ${selected ? 'selected' : ''} ${correct ? 'correct' : ''} ${incorrect ? 'incorrect' : ''}`}
-                  disabled={state.session?.questionStatus !== 'answering' || state.session?.paused === true} onClick={() => selectOption(option.id)}>
-                  <span>{option.label}</span>{correct && <b aria-label="정답">✓</b>}{incorrect && <b aria-label="선택한 답">•</b>}
-                </button>
-              );
-            })}
-          </div>
+          {state.session.config.difficulty === 'challenge' ? (
+            <form className="answer-form" onSubmit={submitTypedAnswer}>
+              <label htmlFor="challenge-answer">내 정답</label>
+              <div>
+                <input id="challenge-answer" value={typedAnswer} onChange={(event) => setTypedAnswer(event.target.value)}
+                  inputMode={state.session.currentQuestion.kind === 'math' ? 'numeric' : 'text'}
+                  autoCapitalize="none" autoComplete="off" spellCheck={false}
+                  placeholder={state.session.currentQuestion.kind === 'math' ? '숫자를 입력하세요' : '글자를 입력하세요'}
+                  disabled={state.session.questionStatus !== 'answering' || state.session.paused} />
+                <button type="submit" disabled={!typedAnswer.trim() || state.session.questionStatus !== 'answering' || state.session.paused}>정답 확인</button>
+              </div>
+            </form>
+          ) : (
+            <div className={`option-grid options-${state.session.currentQuestion.options.length}`} role="group" aria-label="보기">
+              {state.session.currentQuestion.options.map((option) => {
+                const selected = state.session?.selectedOptionId === option.id;
+                const correct = state.session?.questionStatus === 'feedback' && option.id === state.session.currentQuestion.correctOptionId;
+                const incorrect = state.session?.questionStatus === 'feedback' && selected && !correct;
+                return (
+                  <button key={option.id} className={`option-button ${selected ? 'selected' : ''} ${correct ? 'correct' : ''} ${incorrect ? 'incorrect' : ''}`}
+                    disabled={state.session?.questionStatus !== 'answering' || state.session?.paused === true} onClick={() => selectOption(option.id)}>
+                    <span>{option.label}</span>{correct && <b aria-label="정답">✓</b>}{incorrect && <b aria-label="선택한 답">•</b>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {state.session.questionStatus === 'feedback' && (
             <Feedback
               resolution={state.session.resolution!}
@@ -490,10 +511,6 @@ function TopBar({ title, onBack }: { title: string; onBack: () => void }) {
 
 function ChoiceChip({ selected, onClick, label, detail, compact = false }: { selected: boolean; onClick: () => void; label: string; detail?: string; compact?: boolean }) {
   return <button role="radio" aria-checked={selected} className={`choice-chip ${selected ? 'active' : ''} ${compact ? 'compact' : ''}`} onClick={onClick}><strong>{label}</strong>{detail && <small>{detail}</small>}<span aria-hidden="true">{selected ? '✓' : ''}</span></button>;
-}
-
-function SetupGroup({ title, children }: { title: string; children: React.ReactNode }) {
-  return <section className="setup-group"><h2>{title}</h2><div className="chip-row">{children}</div></section>;
 }
 
 function Feedback({ resolution, text, explanation, celebrate }: { resolution: 'correct' | 'incorrect' | 'timeout'; text: string; explanation: string; celebrate: boolean }) {

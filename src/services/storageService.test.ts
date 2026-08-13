@@ -16,6 +16,14 @@ describe('로컬 저장', () => {
     expect(loadSettings()).toEqual(DEFAULT_SETTINGS);
   });
 
+  it('이전 새싹 설정은 쉬움으로 옮기고 문제 수·시간 설정은 제거한다', () => {
+    localStorage.setItem('numbercal.settings.v1', JSON.stringify({
+      ...DEFAULT_SETTINGS,
+      lastConfig: { subject: 'english', mode: 'en-fill', difficulty: 'sprout', length: 5, pace: 'fast' }
+    }));
+    expect(loadSettings().lastConfig).toEqual({ subject: 'english', mode: 'en-fill', difficulty: 'easy' });
+  });
+
   it('최근 완료 기록은 20개만 유지한다', () => {
     const make = (id: number): SessionSummary => ({
       id: String(id), completedAt: new Date().toISOString(), config: DEFAULT_SETTINGS.lastConfig,

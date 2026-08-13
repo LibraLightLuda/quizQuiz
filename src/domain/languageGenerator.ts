@@ -113,7 +113,8 @@ const generateListening = (context: LanguageContext): Question => {
   return validateQuestion({
     id: createId('question'), signature: `${context.mode}:${target.id}`,
     subject: korean ? 'korean' : 'english', mode: context.mode, difficulty: context.difficulty, kind: 'listening',
-    prompt: '잘 듣고 알맞은 단어를 골라요', hint: '소리 버튼을 누르면 다시 들을 수 있어요.',
+    prompt: context.difficulty === 'challenge' ? '잘 듣고 알맞은 단어를 입력해요' : '잘 듣고 알맞은 단어를 골라요',
+    hint: '소리 버튼을 누르면 다시 들을 수 있어요.',
     speech: { text: target.word, lang: korean ? 'ko-KR' : 'en-US' },
     options, correctOptionId, explanation: target.word, metadata: { wordId: target.id }
   });

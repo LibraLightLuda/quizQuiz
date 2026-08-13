@@ -3,6 +3,7 @@ import { appReducer, createInitialState } from './appReducer';
 import { DEFAULT_SETTINGS } from '../services/storageService';
 import { generateMathQuestion } from '../domain/mathGenerator';
 import { SeededRandom } from '../services/randomService';
+import { QUESTION_TIME_MS } from '../domain/difficulty';
 
 const makeQuestion = () => generateMathQuestion({ mode: 'math-add', difficulty: 'easy', recentSignatures: [], random: new SeededRandom(9) });
 
@@ -11,7 +12,7 @@ describe('학습 상태 reducer', () => {
     const question = makeQuestion();
     let state = createInitialState(DEFAULT_SETTINGS, []);
     state = appReducer(state, { type: 'START_SESSION', question, config: DEFAULT_SETTINGS.lastConfig });
-    state = appReducer(state, { type: 'READY', questionId: question.id, now: 100, limitMs: 1000 });
+    state = appReducer(state, { type: 'READY', questionId: question.id, now: 100 });
     state = appReducer(state, { type: 'RESOLVE', questionId: question.id, optionId: question.correctOptionId, now: 200, praise: '정답!', gentle: '괜찮아요!' });
     state = appReducer(state, { type: 'RESOLVE', questionId: question.id, optionId: question.correctOptionId, now: 201, praise: '정답!', gentle: '괜찮아요!' });
     state = appReducer(state, { type: 'RESOLVE', questionId: question.id, optionId: null, now: 1100, deadlineExpired: true, praise: '정답!', gentle: '괜찮아요!' });
@@ -24,8 +25,8 @@ describe('학습 상태 reducer', () => {
     const question = makeQuestion();
     let state = createInitialState(DEFAULT_SETTINGS, []);
     state = appReducer(state, { type: 'START_SESSION', question, config: DEFAULT_SETTINGS.lastConfig });
-    state = appReducer(state, { type: 'READY', questionId: question.id, now: 100, limitMs: 1000 });
-    state = appReducer(state, { type: 'RESOLVE', questionId: question.id, optionId: question.correctOptionId, now: 1101, praise: '정답!', gentle: '괜찮아요!' });
+    state = appReducer(state, { type: 'READY', questionId: question.id, now: 100 });
+    state = appReducer(state, { type: 'RESOLVE', questionId: question.id, optionId: question.correctOptionId, now: 101 + QUESTION_TIME_MS, praise: '정답!', gentle: '괜찮아요!' });
     expect(state.session?.answers[0].resolution).toBe('timeout');
   });
 
@@ -33,8 +34,8 @@ describe('학습 상태 reducer', () => {
     const question = makeQuestion();
     let state = createInitialState(DEFAULT_SETTINGS, []);
     state = appReducer(state, { type: 'START_SESSION', question, config: DEFAULT_SETTINGS.lastConfig });
-    state = appReducer(state, { type: 'READY', questionId: question.id, now: 100, limitMs: 1000 });
-    state = appReducer(state, { type: 'RESOLVE', questionId: question.id, optionId: question.correctOptionId, now: 1100, praise: '정답!', gentle: '괜찮아요!' });
+    state = appReducer(state, { type: 'READY', questionId: question.id, now: 100 });
+    state = appReducer(state, { type: 'RESOLVE', questionId: question.id, optionId: question.correctOptionId, now: 100 + QUESTION_TIME_MS, praise: '정답!', gentle: '괜찮아요!' });
     expect(state.session?.answers[0].resolution).toBe('correct');
   });
 
@@ -42,9 +43,9 @@ describe('학습 상태 reducer', () => {
     const question = makeQuestion();
     let state = createInitialState(DEFAULT_SETTINGS, []);
     state = appReducer(state, { type: 'START_SESSION', question, config: DEFAULT_SETTINGS.lastConfig });
-    state = appReducer(state, { type: 'READY', questionId: question.id, now: 100, limitMs: 1000 });
-    state = appReducer(state, { type: 'RESOLVE', questionId: question.id, optionId: null, now: 1101, deadlineExpired: true, praise: '정답!', gentle: '괜찮아요!' });
-    state = appReducer(state, { type: 'RESOLVE', questionId: question.id, optionId: question.correctOptionId, now: 1101, praise: '정답!', gentle: '괜찮아요!' });
+    state = appReducer(state, { type: 'READY', questionId: question.id, now: 100 });
+    state = appReducer(state, { type: 'RESOLVE', questionId: question.id, optionId: null, now: 101 + QUESTION_TIME_MS, deadlineExpired: true, praise: '정답!', gentle: '괜찮아요!' });
+    state = appReducer(state, { type: 'RESOLVE', questionId: question.id, optionId: question.correctOptionId, now: 101 + QUESTION_TIME_MS, praise: '정답!', gentle: '괜찮아요!' });
     expect(state.session?.answers).toHaveLength(1);
     expect(state.session?.answers[0].resolution).toBe('timeout');
   });
@@ -53,7 +54,7 @@ describe('학습 상태 reducer', () => {
     const question = makeQuestion();
     let state = createInitialState(DEFAULT_SETTINGS, []);
     state = appReducer(state, { type: 'START_SESSION', question, config: DEFAULT_SETTINGS.lastConfig });
-    state = appReducer(state, { type: 'READY', questionId: 'old-question', now: 100, limitMs: 1000 });
+    state = appReducer(state, { type: 'READY', questionId: 'old-question', now: 100 });
     expect(state.session?.questionStatus).toBe('presenting');
     expect(state.session?.answers).toHaveLength(0);
   });
@@ -62,7 +63,7 @@ describe('학습 상태 reducer', () => {
     const question = makeQuestion();
     let state = createInitialState(DEFAULT_SETTINGS, []);
     state = appReducer(state, { type: 'START_SESSION', question, config: DEFAULT_SETTINGS.lastConfig });
-    state = appReducer(state, { type: 'READY', questionId: question.id, now: 100, limitMs: 10000 });
+    state = appReducer(state, { type: 'READY', questionId: question.id, now: 100 });
     state = appReducer(state, { type: 'PAUSE', now: 400 });
     state = appReducer(state, { type: 'RESUME', now: 5400 });
     state = appReducer(state, { type: 'RESOLVE', questionId: question.id, optionId: question.correctOptionId, now: 5600, praise: '정답!', gentle: '괜찮아요!' });
@@ -73,11 +74,11 @@ describe('학습 상태 reducer', () => {
     const question = makeQuestion();
     let state = createInitialState(DEFAULT_SETTINGS, []);
     state = appReducer(state, { type: 'START_SESSION', question, config: DEFAULT_SETTINGS.lastConfig });
-    state = appReducer(state, { type: 'READY', questionId: question.id, now: 100, limitMs: null });
+    state = appReducer(state, { type: 'READY', questionId: question.id, now: 100 });
     state = appReducer(state, { type: 'RESOLVE', questionId: question.id, optionId: question.correctOptionId, now: 200, praise: '정답!', gentle: '괜찮아요!' });
     const before = state;
     state = appReducer(state, { type: 'ADVANCE', questionId: 'old-question', nextQuestion: makeQuestion() });
-    state = appReducer(state, { type: 'READY', questionId: question.id, now: 300, limitMs: null });
+    state = appReducer(state, { type: 'READY', questionId: question.id, now: 300 });
     expect(state).toBe(before);
     expect(state.session?.answers).toHaveLength(1);
   });

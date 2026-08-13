@@ -4,11 +4,6 @@ type Seed = readonly [word: string, meaning: string, category: string];
 
 const rangesFor = (word: string, difficulty: Difficulty): MaskRange[] => {
   const length = word.length;
-  if (difficulty === 'sprout') {
-    const vowels = Array.from(word).flatMap((letter, index) => 'aeiou'.includes(letter) ? [index] : []);
-    const starts = vowels.length ? vowels : [Math.floor(length / 2)];
-    return starts.map((start) => ({ start, length: 1 }));
-  }
   const wanted = difficulty === 'challenge' ? Math.min(3, length - 2) : difficulty === 'hard' ? 2 : difficulty === 'normal' && length >= 6 ? 2 : 1;
   const starts = [...new Set([0, Math.max(0, Math.floor((length - wanted) / 2)), length - wanted])];
   return starts.map((start) => ({ start, length: wanted }));
@@ -24,18 +19,6 @@ const define = (difficulty: Difficulty, seeds: readonly Seed[]): EnglishWord[] =
     maskRanges: rangesFor(word, difficulty),
     ttsLang: 'en-US'
   }));
-
-const sprout: Seed[] = [
-  ['cat', '고양이', 'animal'], ['dog', '강아지', 'animal'], ['pig', '돼지', 'animal'], ['cow', '소', 'animal'],
-  ['fox', '여우', 'animal'], ['ant', '개미', 'animal'], ['bee', '벌', 'animal'], ['owl', '부엉이', 'animal'],
-  ['fish', '물고기', 'animal'], ['duck', '오리', 'animal'], ['lion', '사자', 'animal'], ['bear', '곰', 'animal'],
-  ['cake', '케이크', 'food'], ['milk', '우유', 'food'], ['rice', '쌀밥', 'food'],
-  ['egg', '달걀', 'food'], ['jam', '잼', 'food'], ['corn', '옥수수', 'food'], ['pear', '배', 'food'],
-  ['book', '책', 'school'], ['pen', '펜', 'school'], ['bag', '가방', 'school'], ['desk', '책상', 'school'],
-  ['red', '빨간색', 'color'], ['blue', '파란색', 'color'], ['pink', '분홍색', 'color'], ['gray', '회색', 'color'],
-  ['sun', '해', 'nature'], ['moon', '달', 'nature'], ['star', '별', 'nature'], ['tree', '나무', 'nature'],
-  ['hand', '손', 'body'], ['foot', '발', 'body'], ['nose', '코', 'body'], ['eye', '눈', 'body']
-];
 
 const easy: Seed[] = [
   ['apple', '사과', 'food'],
@@ -89,6 +72,6 @@ const challenge: Seed[] = [
 ];
 
 export const englishWords: EnglishWord[] = [
-  ...define('sprout', sprout), ...define('easy', easy), ...define('normal', normal),
+  ...define('easy', easy), ...define('normal', normal),
   ...define('hard', hard), ...define('challenge', challenge)
 ];

@@ -1,7 +1,7 @@
 import type { AppState, Screen } from './appState';
 import type { AnswerRecord, Question, Resolution, SessionConfig, SessionSummary, Settings, Subject, Mode } from '../domain/types';
 import { createId } from '../services/randomService';
-import { modesForSubject } from '../domain/difficulty';
+import { modesForSubject, QUESTION_TIME_MS } from '../domain/difficulty';
 
 export type AppAction =
   | { type: 'GO_HOME' }
@@ -14,7 +14,7 @@ export type AppAction =
   | { type: 'CLEAR_HISTORY' }
   | { type: 'START_SESSION'; question: Question; config: SessionConfig }
   | { type: 'REPLACE_QUESTION'; questionId: string; question: Question; config: SessionConfig }
-  | { type: 'READY'; questionId: string; now: number; limitMs: number | null }
+  | { type: 'READY'; questionId: string; now: number }
   | { type: 'RESOLVE'; questionId: string; optionId: string | null; now: number; deadlineExpired?: boolean; praise: string; gentle: string }
   | { type: 'ADVANCE'; questionId: string; nextQuestion: Question | null; summary?: SessionSummary }
   | { type: 'PAUSE'; now: number }
@@ -106,7 +106,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       const session = state.session;
       if (!session || session.questionStatus !== 'presenting' || session.currentQuestion.id !== action.questionId) return state;
       if (session.paused) return state;
-      return { ...state, session: { ...session, questionStatus: 'answering', startedAt: action.now, elapsedMs: 0, limitMs: action.limitMs, remainingMs: action.limitMs, deadline: action.limitMs === null ? null : action.now + action.limitMs } };
+      return { ...state, session: { ...session, questionStatus: 'answering', startedAt: action.now, elapsedMs: 0, limitMs: QUESTION_TIME_MS, remainingMs: QUESTION_TIME_MS, deadline: action.now + QUESTION_TIME_MS } };
     }
     case 'RESOLVE': return resolve(state, action);
     case 'ADVANCE': {

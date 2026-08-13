@@ -22,12 +22,11 @@ test('하위 경로 PWA가 올바른 scope로 설치되고 오프라인 학습�
   await page.reload();
   await expect(page.getByRole('heading', { name: '어린이 학습 놀이터' })).toBeVisible();
   await page.getByRole('button', { name: /수학 더하고/ }).click();
-  await page.getByRole('button', { name: /덧셈/ }).click();
-  await page.getByRole('radio', { name: '5문제', exact: true }).click();
+  await page.getByRole('button', { name: /^덧셈 / }).click();
   await page.getByRole('button', { name: /시작할래요/ }).click();
-  for (let index = 0; index < 5; index += 1) {
+  for (let index = 0; index < 15; index += 1) {
     await page.locator('.option-button:not([disabled])').first().click();
-    if (index < 4) await expect(page.getByText(`${index + 2} / 5`)).toBeVisible({ timeout: 3000 });
+    if (index < 14) await expect(page.getByText(`${index + 2} / 15`)).toBeVisible({ timeout: 3000 });
   }
   await expect(page.locator('.result-screen')).toBeVisible({ timeout: 3000 });
 });

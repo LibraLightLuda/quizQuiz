@@ -1,11 +1,10 @@
 export type Subject = 'math' | 'korean' | 'english';
-export type Difficulty = 'sprout' | 'easy' | 'normal' | 'hard' | 'challenge';
-export type SessionLength = 5 | 10 | 20;
-export type Pace = 'untimed' | 'relaxed' | 'normal' | 'fast';
+export type Difficulty = 'easy' | 'normal' | 'hard' | 'challenge';
 export type Mode =
   | 'math-add'
   | 'math-subtract'
   | 'math-multiply'
+  | 'math-mixed'
   | 'ko-fill'
   | 'ko-listen'
   | 'en-fill'
@@ -68,8 +67,6 @@ export interface SessionConfig {
   subject: Subject;
   mode: Mode;
   difficulty: Difficulty;
-  length: SessionLength;
-  pace: Pace;
 }
 
 export interface AnswerRecord {

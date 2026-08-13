@@ -4,7 +4,7 @@ import { validateQuestion } from './questionValidation';
 import { createId, pick, randomInt, type RandomSource } from '../services/randomService';
 
 interface MathContext {
-  mode: 'math-add' | 'math-subtract' | 'math-multiply';
+  mode: 'math-add' | 'math-subtract' | 'math-multiply' | 'math-mixed';
   difficulty: Difficulty;
   recentSignatures: readonly string[];
   recentAnswers?: readonly number[];
@@ -12,12 +12,10 @@ interface MathContext {
   random: RandomSource;
 }
 
-const makeOperands = (mode: MathContext['mode'], difficulty: Difficulty, random: RandomSource): number[] => {
+type MathOperation = Exclude<MathContext['mode'], 'math-mixed'>;
+
+const makeOperands = (mode: MathOperation, difficulty: Difficulty, random: RandomSource): number[] => {
   if (mode === 'math-add') {
-    if (difficulty === 'sprout') {
-      const first = randomInt(random, 0, 9);
-      return [first, randomInt(random, 0, Math.min(9, 10 - first))];
-    }
     if (difficulty === 'easy') {
       const first = randomInt(random, 0, 20);
       return [first, randomInt(random, 0, Math.min(20, 30 - first))];
@@ -30,41 +28,36 @@ const makeOperands = (mode: MathContext['mode'], difficulty: Difficulty, random:
 
   if (mode === 'math-subtract') {
     const ranges: Record<Difficulty, readonly [number, number]> = {
-      sprout: [0, 10], easy: [0, 30], normal: [10, 99], hard: [10, 299], challenge: [100, 999]
+      easy: [0, 30], normal: [10, 99], hard: [10, 299], challenge: [100, 999]
     };
     const [min, max] = ranges[difficulty];
-    if (difficulty === 'sprout') {
-      const ones = randomInt(random, min, max);
-      return [ones, ones === 10 ? pick(random, [0, 10]) : randomInt(random, 0, ones)];
-    }
     const a = randomInt(random, min, max);
     const b = randomInt(random, min, max);
     return [Math.max(a, b), Math.min(a, b)];
   }
 
-  if (difficulty === 'sprout') return [pick(random, [1, 2, 5]), randomInt(random, 1, 5)];
   if (difficulty === 'easy') return [pick(random, [2, 3, 4, 5, 10]), randomInt(random, 1, 9)];
   if (difficulty === 'normal') return [randomInt(random, 2, 9), randomInt(random, 2, 9)];
   if (difficulty === 'hard') return [randomInt(random, 2, 20), randomInt(random, 2, 9)];
   return [randomInt(random, 10, 99), randomInt(random, 2, 9)];
 };
 
-const calculate = (mode: MathContext['mode'], operands: number[]): number => {
+const calculate = (mode: MathOperation, operands: number[]): number => {
   if (mode === 'math-add') return operands.reduce((sum, value) => sum + value, 0);
   if (mode === 'math-subtract') return operands[0] - operands[1];
   return operands[0] * operands[1];
 };
 
-const signatureFor = (mode: MathContext['mode'], operands: number[]): string => {
+const signatureFor = (mode: MathOperation, operands: number[]): string => {
   const normalized = mode === 'math-add' || mode === 'math-multiply' ? [...operands].sort((a, b) => a - b) : operands;
   return `${mode}:${normalized.join(',')}`;
 };
 
 const distractorsFor = (
-  mode: MathContext['mode'], operands: number[], answer: number, difficulty: Difficulty, random: RandomSource
+  mode: MathOperation, operands: number[], answer: number, difficulty: Difficulty, random: RandomSource
 ): number[] => {
   const candidates = new Set<number>();
-  const offsets = difficulty === 'sprout' ? [1, -1, 2, -2, 3] : [1, -1, 2, -2, 10, -10, 100, -100];
+  const offsets = [1, -1, 2, -2, 10, -10, 100, -100];
   offsets.forEach((offset) => candidates.add(answer + offset));
 
   if (mode === 'math-multiply') {
@@ -77,7 +70,7 @@ const distractorsFor = (
   } else if (operands.length === 2) {
     const [a, b] = operands;
     candidates.add(mode === 'math-add' ? a + Math.max(0, b - 1) : a - Math.max(0, b - 1));
-    if (difficulty !== 'sprout') candidates.add(mode === 'math-add' ? a + b + 10 : a - b + 10);
+    candidates.add(mode === 'math-add' ? a + b + 10 : a - b + 10);
     candidates.add(Math.abs(a - b));
   }
 
@@ -90,25 +83,30 @@ const distractorsFor = (
 };
 
 export const generateMathQuestion = (context: MathContext): Question => {
+  const operation: MathOperation = context.mode === 'math-mixed'
+    ? pick(context.random, ['math-add', 'math-subtract', 'math-multiply'] as const)
+    : context.mode;
   let operands: number[] = [];
   let signature = '';
   let answer = 0;
   const recentLimit = context.recentSignatures.length >= 8 ? 8 : context.recentSignatures.length;
 
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    operands = makeOperands(context.mode, context.difficulty, context.random);
-    signature = signatureFor(context.mode, operands);
-    answer = calculate(context.mode, operands);
+    operands = makeOperands(operation, context.difficulty, context.random);
+    signature = context.mode === 'math-mixed'
+      ? `math-mixed:${signatureFor(operation, operands)}`
+      : signatureFor(operation, operands);
+    answer = calculate(operation, operands);
     const windowSize = attempt < 30 ? recentLimit : Math.min(4, recentLimit);
     const repeated = context.recentSignatures.slice(-windowSize).includes(signature);
     const sameAnswerThreeTimes = context.recentAnswers?.slice(-2).every((value) => value === answer) && context.recentAnswers.length >= 2;
     if (!repeated && !sameAnswerThreeTimes) break;
   }
 
-  const symbol = context.mode === 'math-add' ? '+' : context.mode === 'math-subtract' ? '−' : '×';
+  const symbol = operation === 'math-add' ? '+' : operation === 'math-subtract' ? '−' : '×';
   const { options, correctOptionId } = makeOptions(
     answer,
-    distractorsFor(context.mode, operands, answer, context.difficulty, context.random),
+    distractorsFor(operation, operands, answer, context.difficulty, context.random),
     context.difficulty,
     context.random,
     (value) => String(Number(value)),
@@ -123,10 +121,9 @@ export const generateMathQuestion = (context: MathContext): Question => {
     difficulty: context.difficulty,
     kind: 'math',
     prompt: `${operands.join(` ${symbol} `)} = ?`,
-    hint: context.mode === 'math-multiply' && context.difficulty === 'sprout' ? '같은 수를 여러 번 더해 보아요' : undefined,
     options,
     correctOptionId,
     explanation: `${operands.join(` ${symbol} `)} = ${answer}`,
-    metadata: { operands, answer }
+    metadata: { operands, answer, operation }
   });
 };
