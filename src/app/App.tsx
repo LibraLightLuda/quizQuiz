@@ -10,6 +10,7 @@ import { cancelSpeech, speak, speechSupported } from '../services/speechService'
 import { playSuccessSound, unlockAudio } from '../services/soundService';
 import { clearHistory, loadHistory, loadSettings, saveSession, saveSettings } from '../services/storageService';
 import SudokuMode from '../sudoku/SudokuMode';
+import MemoryMode from '../memory/MemoryMode';
 import '../styles/global.css';
 
 const random = new CryptoRandom();
@@ -38,6 +39,7 @@ const subjectForMode = (mode: Mode): Subject => modeInfo[mode].subject;
 function App() {
   const [state, dispatch] = useReducer(appReducer, undefined, () => createInitialState(loadSettings(), loadHistory()));
   const [sudokuOpen, setSudokuOpen] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [timerAnnouncement, setTimerAnnouncement] = useState('');
   const [showExit, setShowExit] = useState(false);
@@ -323,6 +325,18 @@ function App() {
   const canListen = state.settings.tts && speechSupported();
   const activeAnimations = state.settings.animations && !reducedMotion;
 
+  if (memoryOpen) {
+    return (
+      <div className={`app-shell ${activeAnimations ? '' : 'reduce-motion'}`}>
+        <MemoryMode
+          onExit={() => setMemoryOpen(false)}
+          soundEnabled={state.settings.sound}
+          animationsEnabled={activeAnimations}
+        />
+      </div>
+    );
+  }
+
   if (sudokuOpen) {
     return (
       <div className={`app-shell ${activeAnimations ? '' : 'reduce-motion'}`}>
@@ -357,6 +371,11 @@ function App() {
                 </button>
               );
             })}
+            <button className="subject-card memory" onClick={() => setMemoryOpen(true)}>
+              <span className="subject-icon" aria-hidden="true">🧠</span>
+              <span className="subject-copy"><strong>기억력 챌린지</strong><small>뜻이 연결되는 카드를 찾아요</small></span>
+              <span className="arrow" aria-hidden="true">›</span>
+            </button>
             <button className="subject-card sudoku" onClick={() => setSudokuOpen(true)}>
               <span className="subject-icon" aria-hidden="true">▦</span>
               <span className="subject-copy"><strong>스도쿠</strong><small>숫자 규칙을 찾아요</small></span>

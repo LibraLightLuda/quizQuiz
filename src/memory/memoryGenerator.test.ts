@@ -1,0 +1,39 @@
+import { describe, expect, it } from 'vitest';
+import { calculateStars, createMemoryProgress, layoutSignature } from './memoryGenerator';
+
+describe('학습형 기억력 카드 생성', () => {
+  it('같은 그림이 아니라 의미가 연결된 고유한 쌍을 만든다', () => {
+    const progress = createMemoryProgress('math', 'master', 'math-master');
+    expect(progress.cards).toHaveLength(20);
+    expect(new Set(progress.cards.map((card) => card.content)).size).toBe(20);
+    const grouped = progress.cards.reduce((map, card) => {
+      map.set(card.pairId, [...(map.get(card.pairId) ?? []), card]);
+      return map;
+    }, new Map<string, typeof progress.cards>());
+    expect(grouped.size).toBe(10);
+    for (const cards of grouped.values()) {
+      expect(cards).toHaveLength(2);
+      expect(cards[0].content).not.toBe(cards[1].content);
+      expect(new Set(cards.map((card) => card.side))).toEqual(new Set(['question', 'answer']));
+    }
+  });
+
+  it('통합 모드에는 수학·한국어·영어가 모두 등장한다', () => {
+    const progress = createMemoryProgress('mixed', 'growing', 'mixed-balanced');
+    expect(new Set(progress.cards.map((card) => card.category))).toEqual(new Set(['math', 'korean', 'english']));
+  });
+
+  it('일일 도전 시드는 같은 배치를 재현하고 일반 게임은 최근 배치를 피한다', () => {
+    const first = createMemoryProgress('mixed', 'growing', 'daily-2026-08-14', true, '2026-08-14');
+    const same = createMemoryProgress('mixed', 'growing', 'daily-2026-08-14', true, '2026-08-14');
+    const avoided = createMemoryProgress('mixed', 'growing', 'daily-2026-08-14', false, undefined, [layoutSignature(first.cards)]);
+    expect(layoutSignature(same.cards)).toBe(layoutSignature(first.cards));
+    expect(layoutSignature(avoided.cards)).not.toBe(layoutSignature(first.cards));
+  });
+
+  it('시도 횟수에 따라 별을 1~3개 준다', () => {
+    expect(calculateStars(4, 4)).toBe(3);
+    expect(calculateStars(4, 6)).toBe(2);
+    expect(calculateStars(4, 7)).toBe(1);
+  });
+});
