@@ -165,3 +165,49 @@ test('320×568 화면에서 도전 입력 UI가 가로로 넘치지 않는다', 
   await expect(page.getByLabel('내 정답')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
 });
+
+test('스도쿠 첫걸음을 저장해 이어 풀고 최고 기록을 남긴다', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /스도쿠 숫자 규칙/ }).click();
+  await page.getByRole('button', { name: /첫걸음.*4×4/ }).click();
+  await expect(page.getByRole('grid', { name: '4×4 스도쿠 퍼즐' })).toBeVisible();
+
+  const progress = await page.evaluate(() => JSON.parse(localStorage.getItem('numbercal.sudoku.progress.v1') ?? 'null'));
+  const firstBlank = progress.puzzle.puzzle.findIndex((cell: number) => cell === 0);
+  const row = Math.floor(firstBlank / 4) + 1;
+  const column = (firstBlank % 4) + 1;
+  await page.getByRole('gridcell', { name: `${row}행 ${column}열, 빈칸` }).click();
+  await page.getByRole('button', { name: `숫자 ${progress.puzzle.solution[firstBlank]}`, exact: true }).click();
+  await expect.poll(() => page.evaluate((index) => {
+    const saved = JSON.parse(localStorage.getItem('numbercal.sudoku.progress.v1') ?? 'null');
+    return saved?.grid[index];
+  }, firstBlank)).toBe(progress.puzzle.solution[firstBlank]);
+
+  await page.reload();
+  await page.getByRole('button', { name: /스도쿠 숫자 규칙/ }).click();
+  await page.getByRole('button', { name: /첫걸음 이어서 풀기/ }).click();
+
+  const resumed = await page.evaluate(() => JSON.parse(localStorage.getItem('numbercal.sudoku.progress.v1') ?? 'null'));
+  for (let index = 0; index < resumed.grid.length; index += 1) {
+    if (resumed.grid[index] !== 0) continue;
+    const cellRow = Math.floor(index / 4) + 1;
+    const cellColumn = (index % 4) + 1;
+    await page.getByRole('gridcell', { name: `${cellRow}행 ${cellColumn}열, 빈칸` }).click();
+    await page.getByRole('button', { name: `숫자 ${resumed.puzzle.solution[index]}`, exact: true }).click();
+  }
+
+  await expect(page.getByRole('heading', { name: /최고 기록이에요/ })).toBeVisible();
+  const storedRecords = await page.evaluate(() => JSON.parse(localStorage.getItem('numbercal.sudoku.records.v1') ?? 'null'));
+  expect(storedRecords.byDifficulty.beginner.completedCount).toBe(1);
+  expect(await page.evaluate(() => localStorage.getItem('numbercal.sudoku.progress.v1'))).toBeNull();
+});
+
+test('320×568 화면에서 스도쿠 터치 UI가 가로로 넘치지 않는다', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto('/');
+  await page.getByRole('button', { name: /스도쿠 숫자 규칙/ }).click();
+  await page.getByRole('button', { name: /첫걸음.*4×4/ }).click();
+  await expect(page.getByRole('grid', { name: '4×4 스도쿠 퍼즐' })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+  await expect(page.getByRole('button', { name: '힌트' })).toBeVisible();
+});

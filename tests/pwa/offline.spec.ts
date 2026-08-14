@@ -29,4 +29,8 @@ test('하위 경로 PWA가 올바른 scope로 설치되고 오프라인 학습�
     if (index < 14) await expect(page.getByText(`${index + 2} / 15`)).toBeVisible({ timeout: 3000 });
   }
   await expect(page.locator('.result-screen')).toBeVisible({ timeout: 3000 });
+  await page.getByRole('button', { name: '처음으로' }).click();
+  await page.getByRole('button', { name: /스도쿠 숫자 규칙/ }).click();
+  await page.getByRole('button', { name: /첫걸음 4×4/ }).click();
+  await expect(page.getByRole('grid', { name: '4×4 스도쿠 퍼즐' })).toBeVisible();
 });
