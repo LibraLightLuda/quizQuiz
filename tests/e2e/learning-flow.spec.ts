@@ -166,6 +166,24 @@ test('320×568 화면에서 도전 입력 UI가 가로로 넘치지 않는다', 
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
 });
 
+test('PC 홈 화면의 학습 카드가 같은 크기로 3열 정렬된다', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto('/');
+  const cards = await page.locator('.subject-grid .subject-card').evaluateAll((elements) => elements.map((element) => {
+    const box = element.getBoundingClientRect();
+    return { left: box.left, top: box.top, width: box.width, height: box.height };
+  }));
+
+  expect(cards.length).toBeGreaterThanOrEqual(5);
+  expect(Math.max(...cards.map((card) => card.width)) - Math.min(...cards.map((card) => card.width))).toBeLessThan(1);
+  expect(Math.max(...cards.map((card) => card.height)) - Math.min(...cards.map((card) => card.height))).toBeLessThan(1);
+
+  const rows = [...new Set(cards.map((card) => Math.round(card.top)))];
+  expect(rows).toHaveLength(2);
+  expect(cards.filter((card) => Math.round(card.top) === rows[0])).toHaveLength(3);
+  expect(cards.every((card) => card.left >= 0 && card.left + card.width <= 1280)).toBe(true);
+});
+
 test('스도쿠 첫걸음을 저장해 이어 풀고 최고 기록을 남긴다', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /스도쿠 숫자 규칙/ }).click();

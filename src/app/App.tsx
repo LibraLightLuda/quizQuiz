@@ -11,6 +11,7 @@ import { playSuccessSound, unlockAudio } from '../services/soundService';
 import { clearHistory, loadHistory, loadSettings, saveSession, saveSettings } from '../services/storageService';
 import SudokuMode from '../sudoku/SudokuMode';
 import MemoryMode from '../memory/MemoryMode';
+import StoryMode from '../story/StoryMode';
 import '../styles/global.css';
 
 const random = new CryptoRandom();
@@ -40,6 +41,7 @@ function App() {
   const [state, dispatch] = useReducer(appReducer, undefined, () => createInitialState(loadSettings(), loadHistory()));
   const [sudokuOpen, setSudokuOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [storyOpen, setStoryOpen] = useState(false);
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [timerAnnouncement, setTimerAnnouncement] = useState('');
   const [showExit, setShowExit] = useState(false);
@@ -325,6 +327,19 @@ function App() {
   const canListen = state.settings.tts && speechSupported();
   const activeAnimations = state.settings.animations && !reducedMotion;
 
+  if (storyOpen) {
+    return (
+      <div className={`app-shell ${activeAnimations ? '' : 'reduce-motion'}`}>
+        <StoryMode
+          onExit={() => setStoryOpen(false)}
+          soundEnabled={state.settings.sound}
+          ttsEnabled={state.settings.tts}
+          animationsEnabled={activeAnimations}
+        />
+      </div>
+    );
+  }
+
   if (memoryOpen) {
     return (
       <div className={`app-shell ${activeAnimations ? '' : 'reduce-motion'}`}>
@@ -360,7 +375,7 @@ function App() {
             <h1>어린이 학습 놀이터</h1>
             <p className="lead">무엇을 배워 볼까요?</p>
           </header>
-          <section className="subject-grid has-sudoku" aria-label="과목 선택">
+          <section className="subject-grid has-learning-games" aria-label="과목 선택">
             {(Object.keys(subjectInfo) as Subject[]).map((subject) => {
               const info = subjectInfo[subject];
               return (
@@ -374,6 +389,11 @@ function App() {
             <button className="subject-card memory" onClick={() => setMemoryOpen(true)}>
               <span className="subject-icon" aria-hidden="true">🧠</span>
               <span className="subject-copy"><strong>기억력 챌린지</strong><small>뜻이 연결되는 카드를 찾아요</small></span>
+              <span className="arrow" aria-hidden="true">›</span>
+            </button>
+            <button className="subject-card story" onClick={() => setStoryOpen(true)}>
+              <span className="subject-icon" aria-hidden="true">📖</span>
+              <span className="subject-copy"><strong>이야기 탐험대</strong><small>읽고 기억하며 생각해요</small></span>
               <span className="arrow" aria-hidden="true">›</span>
             </button>
             <button className="subject-card sudoku" onClick={() => setSudokuOpen(true)}>

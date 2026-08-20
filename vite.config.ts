@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
         manifest: {
           name: '어린이 학습 놀이터',
           short_name: '학습 놀이터',
-          description: '수학, 한국어, 영어, 기억력 챌린지와 스도쿠를 즐겁게 배우는 어린이 학습 앱',
+          description: '수학, 한국어, 영어, 이야기 탐험대, 기억력 챌린지와 스도쿠를 즐겁게 배우는 어린이 학습 앱',
           theme_color: '#5b4ae8',
           background_color: '#f7f7ff',
           display: 'standalone',
