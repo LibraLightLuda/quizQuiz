@@ -34,6 +34,9 @@ test('새로고침 뒤 선택한 카드와 시간이 이어진다', async ({ pag
   await enterMemory(page);
   await page.getByRole('button', { name: /카드 8장 시작/ }).click();
   await page.locator('.memory-card').first().click();
+  await expect(page.locator('.memory-card').first().locator('.memory-card-back')).toHaveCSS('visibility', 'hidden');
+  await expect(page.locator('.memory-card').first().locator('.memory-card-back')).toHaveCSS('opacity', '0');
+  await expect(page.locator('.memory-card').first().locator('.memory-card-front')).toHaveCSS('visibility', 'visible');
   const before = await page.evaluate(() => JSON.parse(localStorage.getItem('numbercal.memory.progress.v1') ?? 'null'));
   expect(before.selectedCardIds).toHaveLength(1);
 

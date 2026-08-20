@@ -17,9 +17,11 @@ import {
   saveSudokuProgress
 } from './sudokuStorage';
 import type { SudokuDifficulty, SudokuProgress, SudokuPuzzle } from './types';
+import SudokuTutorial from './SudokuTutorial';
+import { conflictMessage, sudokuConflicts } from './sudokuRules';
 import './sudoku.css';
 
-type SudokuScreen = 'levels' | 'play' | 'result';
+type SudokuScreen = 'levels' | 'tutorial' | 'play' | 'result';
 
 interface SudokuResult {
   difficulty: SudokuDifficulty;
@@ -64,9 +66,14 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
   const [message, setMessage] = useState('빈칸을 누르고 알맞은 숫자를 골라 보세요.');
   const [generating, setGenerating] = useState<SudokuDifficulty | null>(null);
   const [storageWarning, setStorageWarning] = useState(false);
+  const [inputLocked, setInputLocked] = useState(false);
+  const [wrongAttempts, setWrongAttempts] = useState<Record<number, number>>({});
+  const [triedNumbers, setTriedNumbers] = useState<Record<number, number[]>>({});
   const timerBase = useRef(0);
   const timerStartedAt = useRef(Date.now());
   const mistakeTimer = useRef<number | null>(null);
+  const inputUnlockTimer = useRef<number | null>(null);
+  const inputLock = useRef(false);
   const recommended = recommendedSudokuDifficulty(records);
 
   const currentElapsed = (): number =>
@@ -118,6 +125,7 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
 
   useEffect(() => () => {
     if (mistakeTimer.current !== null) window.clearTimeout(mistakeTimer.current);
+    if (inputUnlockTimer.current !== null) window.clearTimeout(inputUnlockTimer.current);
   }, []);
 
   const enterPuzzle = (next: SudokuProgress) => {
@@ -130,6 +138,10 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
     setDaily(next.daily);
     setSelectedCell(next.grid.findIndex((cell) => cell === 0));
     setMistakeCell(null);
+    inputLock.current = false;
+    setInputLocked(false);
+    setWrongAttempts({});
+    setTriedNumbers({});
     setMessage(next.daily ? '오늘의 퍼즐이에요. 차근차근 시작해 볼까요?' : '빈칸을 누르고 알맞은 숫자를 골라 보세요.');
     setResult(null);
     setScreen('play');
@@ -196,18 +208,57 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
     return null;
   };
 
+  const brieflyLockInput = (duration: number) => {
+    inputLock.current = true;
+    setInputLocked(true);
+    if (inputUnlockTimer.current !== null) window.clearTimeout(inputUnlockTimer.current);
+    inputUnlockTimer.current = window.setTimeout(() => {
+      inputLock.current = false;
+      setInputLocked(false);
+    }, duration);
+  };
+
+  const registerWrongNumber = (cellIndex: number, number: number, explanation: string) => {
+    const attemptCount = (wrongAttempts[cellIndex] ?? 0) + 1;
+    setWrongAttempts((values) => ({ ...values, [cellIndex]: attemptCount }));
+    setTriedNumbers((values) => ({
+      ...values,
+      [cellIndex]: [...new Set([...(values[cellIndex] ?? []), number])]
+    }));
+    setMistakeCell(cellIndex);
+    setMessage(attemptCount >= 2
+      ? '두 번 확인했어요. 이제 찍기는 잠시 쉬고, 가로·세로·상자를 살피거나 힌트를 사용해요.'
+      : explanation);
+    brieflyLockInput(700);
+    if (mistakeTimer.current !== null) window.clearTimeout(mistakeTimer.current);
+    mistakeTimer.current = window.setTimeout(() => setMistakeCell(null), 620);
+  };
+
   const inputNumber = (number: number) => {
+    if (inputLock.current) return;
     if (!puzzle || selectedCell === null || puzzle.puzzle[selectedCell] !== 0 || hinted[selectedCell]) {
       setMessage('먼저 빈칸 하나를 눌러 주세요.');
       return;
     }
-    if (puzzle.solution[selectedCell] !== number) {
-      setMistakeCell(selectedCell);
-      setMessage('괜찮아요! 같은 줄과 작은 상자를 다시 살펴봐요.');
-      if (mistakeTimer.current !== null) window.clearTimeout(mistakeTimer.current);
-      mistakeTimer.current = window.setTimeout(() => setMistakeCell(null), 480);
+    if ((wrongAttempts[selectedCell] ?? 0) >= 2) {
+      setMessage('이 칸은 잠시 멈추고 규칙을 살펴봐요. 다른 빈칸을 고르거나 힌트를 사용할 수 있어요.');
       return;
     }
+    if ((triedNumbers[selectedCell] ?? []).includes(number)) {
+      setMessage(`${number}은(는) 이 칸에서 이미 확인했어요. 다른 가능성을 살펴봐요.`);
+      brieflyLockInput(350);
+      return;
+    }
+    const conflicts = sudokuConflicts(grid, selectedCell, number, puzzle.size, puzzle.boxRows, puzzle.boxCols);
+    if (conflicts.length) {
+      registerWrongNumber(selectedCell, number, conflictMessage(number, conflicts));
+      return;
+    }
+    if (puzzle.solution[selectedCell] !== number) {
+      registerWrongNumber(selectedCell, number, '아직 그 숫자로 정할 근거가 부족해요. 가로·세로·상자를 함께 살펴봐요.');
+      return;
+    }
+    brieflyLockInput(160);
     const next = [...grid];
     next[selectedCell] = number;
     setGrid(next);
@@ -279,7 +330,7 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [grid, hinted, puzzle, screen, selectedCell]);
+  }, [grid, hinted, puzzle, screen, selectedCell, triedNumbers, wrongAttempts]);
 
   if (screen === 'levels') {
     return (
@@ -302,6 +353,12 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
           <span aria-hidden="true">💡</span>
           <div><strong>같은 숫자는 한 번씩!</strong><small>가로줄, 세로줄, 굵은 선 안에 숫자를 겹치지 않게 채워요.</small></div>
         </section>
+
+        <button className="sudoku-tutorial-card" onClick={() => setScreen('tutorial')}>
+          <span aria-hidden="true">🎓</span>
+          <span><strong>처음이라면 규칙 연습</strong><small>가로·세로·작은 상자를 직접 풀며 배워요</small></span>
+          <b>2분</b>
+        </button>
 
         <div className="sudoku-level-grid" aria-label="스도쿠 난이도">
           {SUDOKU_DIFFICULTIES.map((difficulty) => {
@@ -326,6 +383,10 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
         {generating && <p className="sudoku-loading" role="status">새 퍼즐을 만들고 있어요…</p>}
       </main>
     );
+  }
+
+  if (screen === 'tutorial') {
+    return <SudokuTutorial onBack={() => setScreen('levels')} onStartBeginner={() => startPuzzle('beginner')} soundEnabled={soundEnabled} />;
   }
 
   if (screen === 'result' && result) {
@@ -361,6 +422,9 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
     : Math.floor(selectedRow / puzzle.boxRows) * (puzzle.size / puzzle.boxCols) + Math.floor(selectedColumn / puzzle.boxCols);
   const filledCount = grid.filter((cell, index) => puzzle.puzzle[index] === 0 && cell !== 0).length;
   const blankCount = puzzle.puzzle.filter((cell) => cell === 0).length;
+  const selectedEditable = selectedCell !== null && puzzle.puzzle[selectedCell] === 0 && !hinted[selectedCell];
+  const selectedWrongAttempts = selectedCell === null ? 0 : (wrongAttempts[selectedCell] ?? 0);
+  const selectedTriedNumbers = selectedCell === null ? [] : (triedNumbers[selectedCell] ?? []);
 
   return (
     <main className={`screen sudoku-play-screen sudoku-play-size-${puzzle.size}`}>
@@ -393,7 +457,7 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
             return (
               <button key={index} role="gridcell" className={classNames} aria-selected={selected}
                 aria-label={`${row + 1}행 ${column + 1}열, ${stateLabel}`}
-                onClick={() => { setSelectedCell(index); setMessage(given ? '처음부터 채워진 숫자예요. 주변 빈칸을 살펴봐요!' : '어떤 숫자가 들어갈까요?'); }}>
+                onClick={() => { setSelectedCell(index); setMessage(given ? '처음부터 채워진 숫자예요. 주변 빈칸을 살펴봐요!' : (wrongAttempts[index] ?? 0) >= 2 ? '이 칸은 두 번 살펴봤어요. 다른 빈칸이나 힌트로 단서를 찾아봐요.' : '어떤 숫자가 들어갈까요?'); }}>
                 {value || ''}{hinted[index] && <span className="hint-dot" aria-hidden="true">•</span>}
               </button>
             );
@@ -406,7 +470,11 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
       <div className="sudoku-keypad" aria-label="숫자 선택" style={{ gridTemplateColumns: `repeat(${puzzle.size === 9 ? 5 : puzzle.size}, 1fr)` }}>
         {Array.from({ length: puzzle.size }, (_, index) => index + 1).map((number) => {
           const used = grid.filter((cell) => cell === number).length;
-          return <button key={number} disabled={used >= puzzle.size} aria-label={`숫자 ${number}`} onClick={() => inputNumber(number)}><strong>{number}</strong><small>{used}/{puzzle.size}</small></button>;
+          const conflicts = selectedCell === null ? [] : sudokuConflicts(grid, selectedCell, number, puzzle.size, puzzle.boxRows, puzzle.boxCols);
+          const tried = selectedTriedNumbers.includes(number);
+          const disabled = inputLocked || !selectedEditable || selectedWrongAttempts >= 2 || used >= puzzle.size || tried || conflicts.length > 0;
+          const detail = tried ? '시도함' : conflicts.length ? '겹침' : selectedWrongAttempts >= 2 ? '생각하기' : `${used}/${puzzle.size}`;
+          return <button key={number} disabled={disabled} aria-label={`숫자 ${number}`} onClick={() => inputNumber(number)}><strong>{number}</strong><small>{detail}</small></button>;
         })}
       </div>
 
