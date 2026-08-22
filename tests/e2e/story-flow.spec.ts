@@ -154,6 +154,101 @@ test('320px 화면에서 이야기 홈과 읽기 화면이 가로로 넘치지 �
   await expect(page.getByRole('button', { name: '다음 장면' })).toBeVisible();
 });
 
+test('대표 이야기의 세 장면이 연속 일러스트와 정확한 대체 텍스트로 보인다', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /이야기 탐험대 읽고 기억/ }).click();
+  await page.locator('.story-picks').getByRole('button', { name: /비 오는 날의 우산/ }).click();
+
+  const expectedAlt = [
+    /지우가 먹구름 낀 하늘을 올려다보는 장면/,
+    /지우가 보라색 우산을 펴고 걷는 장면/,
+    /지우와 민수가 보라색 우산 하나를 함께 쓰고/
+  ];
+  for (let index = 0; index < expectedAlt.length; index += 1) {
+    const illustration = page.locator('.story-illustration-image');
+    await expect(illustration).toBeVisible();
+    await expect(illustration).toHaveAttribute('alt', expectedAlt[index]);
+    await expect.poll(() => illustration.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth >= 700)).toBe(true);
+    if (index < expectedAlt.length - 1) await page.getByRole('button', { name: '다음 장면' }).click();
+  }
+});
+
+test('새싹 이야기 여섯 편의 표지가 모두 선명한 그림으로 보인다', async ({ page }) => {
+  await openStoryMode(page);
+  const covers = page.locator('.story-picks button > img');
+  await expect(covers).toHaveCount(6);
+  for (const cover of await covers.all()) {
+    await expect(cover).toBeVisible();
+    await expect.poll(() => cover.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth >= 240)).toBe(true);
+  }
+});
+
+test('한걸음 이야기 여섯 편의 표지와 네 장면이 선명한 그림으로 보인다', async ({ page }) => {
+  await openStoryMode(page);
+  await page.getByRole('radio', { name: /한걸음/ }).click();
+
+  const covers = page.locator('.story-picks button > img');
+  await expect(covers).toHaveCount(6);
+  for (const cover of await covers.all()) {
+    await expect(cover).toBeVisible();
+    await expect.poll(() => cover.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth >= 240)).toBe(true);
+  }
+
+  await page.locator('.story-picks').getByRole('button', { name: /도서관 책의 자리/ }).click();
+  const expectedAlt = [/공룡 책을 골라/, /공룡 책을 재미있게 읽는/, /번호표와 책장 표시/, /알맞은 책장 자리/];
+  for (let index = 0; index < expectedAlt.length; index += 1) {
+    const illustration = page.locator('.story-illustration-image');
+    await expect(illustration).toBeVisible();
+    await expect(illustration).toHaveAttribute('alt', expectedAlt[index]);
+    await expect.poll(() => illustration.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth >= 700)).toBe(true);
+    if (index < expectedAlt.length - 1) await page.getByRole('button', { name: '다음 장면' }).click();
+  }
+});
+
+test('탐험가 이야기 여섯 편의 표지와 다섯 장면이 선명한 그림으로 보인다', async ({ page }) => {
+  await openStoryMode(page);
+  await page.getByRole('radio', { name: /탐험가/ }).click();
+
+  const covers = page.locator('.story-picks button > img');
+  await expect(covers).toHaveCount(6);
+  for (const cover of await covers.all()) {
+    await expect(cover).toBeVisible();
+    await expect.poll(() => cover.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth >= 240)).toBe(true);
+  }
+
+  await page.locator('.story-picks').getByRole('button', { name: /벌이 찾은 꽃밭/ }).click();
+  const expectedAlt = [/날아가는 벌을 발견/, /노란 꽃에 앉아 꿀을/, /다리에 황금빛 꽃가루/, /분홍 꽃으로 날아가는/, /공책에 기록/];
+  for (let index = 0; index < expectedAlt.length; index += 1) {
+    const illustration = page.locator('.story-illustration-image');
+    await expect(illustration).toBeVisible();
+    await expect(illustration).toHaveAttribute('alt', expectedAlt[index]);
+    await expect.poll(() => illustration.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth >= 700)).toBe(true);
+    if (index < expectedAlt.length - 1) await page.getByRole('button', { name: '다음 장면' }).click();
+  }
+});
+
+test('생각왕 이야기 여섯 편의 표지와 여섯 장면이 선명한 그림으로 보인다', async ({ page }) => {
+  await openStoryMode(page);
+  await page.getByRole('radio', { name: /생각왕/ }).click();
+
+  const covers = page.locator('.story-picks button > img');
+  await expect(covers).toHaveCount(6);
+  for (const cover of await covers.all()) {
+    await expect(cover).toBeVisible();
+    await expect.poll(() => cover.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth >= 240)).toBe(true);
+  }
+
+  await page.locator('.story-picks').getByRole('button', { name: /개울을 막은 비닐/ }).click();
+  const expectedAlt = [/느리게 흐르는/, /나뭇잎과 비닐/, /선생님께 알리는/, /관리 직원이/, /다시 흐르는/, /그림 안내판/];
+  for (let index = 0; index < expectedAlt.length; index += 1) {
+    const illustration = page.locator('.story-illustration-image');
+    await expect(illustration).toBeVisible();
+    await expect(illustration).toHaveAttribute('alt', expectedAlt[index]);
+    await expect.poll(() => illustration.evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth >= 700)).toBe(true);
+    if (index < expectedAlt.length - 1) await page.getByRole('button', { name: '다음 장면' }).click();
+  }
+});
+
 test('이야기 장면과 활동 문제를 음성으로 들을 수 있다', async ({ page }) => {
   await installSpeechMock(page);
   await openStoryMode(page);

@@ -65,4 +65,5 @@ export interface MemoryResult {
   isBestAttempts: boolean;
   daily: boolean;
   earnedDailyBadge: boolean;
+  newAchievementIds: string[];
 }

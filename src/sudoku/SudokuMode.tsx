@@ -19,6 +19,7 @@ import {
 import type { SudokuDifficulty, SudokuProgress, SudokuPuzzle } from './types';
 import SudokuTutorial from './SudokuTutorial';
 import { conflictMessage, sudokuConflicts } from './sudokuRules';
+import { SudokuCompleteVisual, SudokuToolIcon } from './SudokuVisuals';
 import './sudoku.css';
 
 type SudokuScreen = 'levels' | 'tutorial' | 'play' | 'result';
@@ -394,7 +395,7 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
     return (
       <main className="screen sudoku-result-screen">
         {animationsEnabled && <SudokuConfetti />}
-        <div className="sudoku-result-medal" aria-hidden="true">★</div>
+        <SudokuCompleteVisual />
         <p className="eyebrow">{result.daily ? '오늘의 스도쿠 성공!' : '퍼즐 완성!'}</p>
         <h1>{result.isBest ? '최고 기록이에요!' : '끝까지 해냈어요!'}</h1>
         <p className="sudoku-result-copy">집중해서 모든 칸을 채웠어요. 정말 멋져요!</p>
@@ -474,14 +475,14 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
           const tried = selectedTriedNumbers.includes(number);
           const disabled = inputLocked || !selectedEditable || selectedWrongAttempts >= 2 || used >= puzzle.size || tried || conflicts.length > 0;
           const detail = tried ? '시도함' : conflicts.length ? '겹침' : selectedWrongAttempts >= 2 ? '생각하기' : `${used}/${puzzle.size}`;
-          return <button key={number} disabled={disabled} aria-label={`숫자 ${number}`} onClick={() => inputNumber(number)}><strong>{number}</strong><small>{detail}</small></button>;
+          return <button key={number} className={conflicts.length ? 'has-conflict' : tried ? 'was-tried' : ''} disabled={disabled} aria-label={`숫자 ${number}`} onClick={() => inputNumber(number)}><strong>{number}</strong><small>{detail}</small>{conflicts.length > 0 && <span className="keypad-conflict-mark" aria-hidden="true">×</span>}</button>;
         })}
       </div>
 
       <div className="sudoku-tools">
-        <button onClick={eraseSelected}><span aria-hidden="true">⌫</span><strong>지우기</strong></button>
-        <button onClick={useHint} disabled={!grid.includes(0)}><span aria-hidden="true">💡</span><strong>힌트</strong></button>
-        <button onClick={replacePuzzle}><span aria-hidden="true">↻</span><strong>새 퍼즐</strong></button>
+        <button onClick={eraseSelected}><SudokuToolIcon kind="erase" /><strong>지우기</strong></button>
+        <button onClick={useHint} disabled={!grid.includes(0)}><SudokuToolIcon kind="hint" /><strong>힌트</strong></button>
+        <button onClick={replacePuzzle}><SudokuToolIcon kind="refresh" /><strong>새 퍼즐</strong></button>
       </div>
       {storageWarning && <p className="settings-note warning" role="alert">진행 상황을 저장하지 못할 수 있어요.</p>}
     </main>

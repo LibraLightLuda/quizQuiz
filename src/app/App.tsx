@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { appReducer, createInitialState } from './appReducer';
 import { difficultyInfo, DIFFICULTIES, modeInfo, modesForSubject, QUESTION_TIME_MS, QUESTION_TIME_SECONDS, SESSION_LENGTH, subjectInfo } from '../domain/difficulty';
@@ -9,12 +9,17 @@ import { CryptoRandom, shuffle } from '../services/randomService';
 import { cancelSpeech, speak, speechSupported } from '../services/speechService';
 import { playSuccessSound, unlockAudio } from '../services/soundService';
 import { clearHistory, loadHistory, loadSettings, saveSession, saveSettings } from '../services/storageService';
-import SudokuMode from '../sudoku/SudokuMode';
-import MemoryMode from '../memory/MemoryMode';
-import StoryMode from '../story/StoryMode';
+import { GuideCharacter } from '../visuals/GuideCharacter';
+import { LearningIcon } from '../visuals/LearningIcon';
+import { hasMathVisual, MathVisual } from '../visuals/MathVisual';
+import { ConceptPicture } from '../visuals/ConceptPicture';
+import { questionConceptIds } from '../visuals/visualAssets';
 import '../styles/global.css';
 
 const random = new CryptoRandom();
+const SudokuMode = lazy(() => import('../sudoku/SudokuMode'));
+const MemoryMode = lazy(() => import('../memory/MemoryMode'));
+const StoryMode = lazy(() => import('../story/StoryMode'));
 const praiseMessages = ['잘했어요!', '정답이에요!', '대단해요!', '멋져요!', '최고예요!', '한 문제 더!'];
 const gentleMessages = ['괜찮아요!', '다음 문제도 해봐요!', '조금만 더 생각해봐요!', '차근차근 잘하고 있어요!'];
 const makeMessagePicker = (values: readonly string[]) => {
@@ -37,6 +42,14 @@ const feedbackDelay = (correct: boolean): number => correct ? 500 : 650;
 
 const subjectForMode = (mode: Mode): Subject => modeInfo[mode].subject;
 
+const GameLoading = () => (
+  <main className="screen game-loading" aria-busy="true" aria-live="polite">
+    <span aria-hidden="true">✦</span>
+    <strong>놀이를 준비하고 있어요</strong>
+    <small>잠시만 기다려 주세요.</small>
+  </main>
+);
+
 function App() {
   const [state, dispatch] = useReducer(appReducer, undefined, () => createInitialState(loadSettings(), loadHistory()));
   const [sudokuOpen, setSudokuOpen] = useState(false);
@@ -50,6 +63,7 @@ function App() {
   const [storageWarning, setStorageWarning] = useState(false);
   const [generationError, setGenerationError] = useState('');
   const [typedAnswer, setTypedAnswer] = useState('');
+  const [mathHintVisible, setMathHintVisible] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
   );
@@ -83,6 +97,7 @@ function App() {
     announcedTimerThresholds.current.clear();
     setTimerAnnouncement('');
     setTypedAnswer('');
+    setMathHintVisible(false);
     speechRequestToken.current += 1;
     speechLock.current = false;
     activeSpeechQuestion.current = null;
@@ -267,7 +282,7 @@ function App() {
     dispatch({
       type: 'RESOLVE', questionId: session.currentQuestion.id,
       optionId: submitted === expected ? session.currentQuestion.correctOptionId : null,
-      now: performance.now(), praise: pickPraise(), gentle: pickGentle()
+      selectedAnswer: submitted, now: performance.now(), praise: pickPraise(), gentle: pickGentle()
     });
   };
 
@@ -330,12 +345,14 @@ function App() {
   if (storyOpen) {
     return (
       <div className={`app-shell ${activeAnimations ? '' : 'reduce-motion'}`}>
-        <StoryMode
-          onExit={() => setStoryOpen(false)}
-          soundEnabled={state.settings.sound}
-          ttsEnabled={state.settings.tts}
-          animationsEnabled={activeAnimations}
-        />
+        <Suspense fallback={<GameLoading />}>
+          <StoryMode
+            onExit={() => setStoryOpen(false)}
+            soundEnabled={state.settings.sound}
+            ttsEnabled={state.settings.tts}
+            animationsEnabled={activeAnimations}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -343,11 +360,13 @@ function App() {
   if (memoryOpen) {
     return (
       <div className={`app-shell ${activeAnimations ? '' : 'reduce-motion'}`}>
-        <MemoryMode
-          onExit={() => setMemoryOpen(false)}
-          soundEnabled={state.settings.sound}
-          animationsEnabled={activeAnimations}
-        />
+        <Suspense fallback={<GameLoading />}>
+          <MemoryMode
+            onExit={() => setMemoryOpen(false)}
+            soundEnabled={state.settings.sound}
+            animationsEnabled={activeAnimations}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -355,11 +374,13 @@ function App() {
   if (sudokuOpen) {
     return (
       <div className={`app-shell ${activeAnimations ? '' : 'reduce-motion'}`}>
-        <SudokuMode
-          onExit={() => setSudokuOpen(false)}
-          soundEnabled={state.settings.sound}
-          animationsEnabled={activeAnimations}
-        />
+        <Suspense fallback={<GameLoading />}>
+          <SudokuMode
+            onExit={() => setSudokuOpen(false)}
+            soundEnabled={state.settings.sound}
+            animationsEnabled={activeAnimations}
+          />
+        </Suspense>
       </div>
     );
   }
@@ -368,39 +389,52 @@ function App() {
     <div className={`app-shell ${activeAnimations ? '' : 'reduce-motion'}`}>
       {state.screen === 'home' && (
         <main className="screen home-screen">
-          <header className="home-header">
+          <header className="home-header home-hero">
             <button className="icon-button settings-button" onClick={() => dispatch({ type: 'OPEN_SETTINGS', from: 'home' })} aria-label="설정 열기">⚙️</button>
-            <div className="brand-mark" aria-hidden="true"><span>＋</span><span>가</span><span>A</span></div>
-            <p className="eyebrow">오늘도 즐겁게 한 문제씩</p>
-            <h1>어린이 학습 놀이터</h1>
-            <p className="lead">무엇을 배워 볼까요?</p>
+            <div className="home-hero-copy">
+              <p className="eyebrow">모리와 함께 한 걸음씩</p>
+              <h1><small>어린이 학습 놀이터</small>오늘은 무엇을<br />배워 볼까요?</h1>
+              <p className="lead">좋아하는 놀이를 골라요.</p>
+            </div>
+            <GuideCharacter className="home-guide" decorative />
           </header>
-          <section className="subject-grid has-learning-games" aria-label="과목 선택">
+          <section className="home-recommendation" aria-labelledby="today-recommendation-title">
+            <div><p className="eyebrow">오늘의 추천</p><h2 id="today-recommendation-title">짧은 이야기 한 편 어때요?</h2></div>
+            <button onClick={() => setStoryOpen(true)} aria-label="오늘의 추천 이야기 탐험대 시작하기">
+              <span className="recommendation-icon"><LearningIcon name="story" /></span>
+              <span><strong>이야기 탐험대</strong><small>읽고 듣고, 세 가지 활동을 해요</small></span>
+              <b aria-hidden="true">시작 ›</b>
+            </button>
+          </section>
+          <section className="home-learning-section" aria-labelledby="learning-list-title">
+            <div className="home-section-title"><p className="eyebrow">모든 학습</p><h2 id="learning-list-title">하고 싶은 놀이를 골라요</h2></div>
+            <div className="subject-grid has-learning-games" aria-label="과목 선택">
             {(Object.keys(subjectInfo) as Subject[]).map((subject) => {
               const info = subjectInfo[subject];
               return (
                 <button key={subject} className={`subject-card ${info.className}`} onClick={() => dispatch({ type: 'SELECT_SUBJECT', subject })}>
-                  <span className="subject-icon" aria-hidden="true">{info.icon}</span>
+                  <span className="subject-icon" aria-hidden="true"><LearningIcon name={subject} /></span>
                   <span className="subject-copy"><strong>{info.label}</strong><small>{info.description}</small></span>
                   <span className="arrow" aria-hidden="true">›</span>
                 </button>
               );
             })}
             <button className="subject-card memory" onClick={() => setMemoryOpen(true)}>
-              <span className="subject-icon" aria-hidden="true">🧠</span>
+              <span className="subject-icon" aria-hidden="true"><LearningIcon name="memory" /></span>
               <span className="subject-copy"><strong>기억력 챌린지</strong><small>뜻이 연결되는 카드를 찾아요</small></span>
               <span className="arrow" aria-hidden="true">›</span>
             </button>
             <button className="subject-card story" onClick={() => setStoryOpen(true)}>
-              <span className="subject-icon" aria-hidden="true">📖</span>
+              <span className="subject-icon" aria-hidden="true"><LearningIcon name="story" /></span>
               <span className="subject-copy"><strong>이야기 탐험대</strong><small>읽고 기억하며 생각해요</small></span>
               <span className="arrow" aria-hidden="true">›</span>
             </button>
             <button className="subject-card sudoku" onClick={() => setSudokuOpen(true)}>
-              <span className="subject-icon" aria-hidden="true">▦</span>
+              <span className="subject-icon" aria-hidden="true"><LearningIcon name="sudoku" /></span>
               <span className="subject-copy"><strong>스도쿠</strong><small>숫자 규칙을 찾아요</small></span>
               <span className="arrow" aria-hidden="true">›</span>
             </button>
+            </div>
           </section>
           {state.history[0] ? (
             <aside className="recent-card" aria-label="최근 학습 결과">
@@ -470,6 +504,16 @@ function App() {
           <section className="question-card">
             <p className="question-kicker">{state.session.currentQuestion.kind === 'listening' ? '귀를 쫑긋!' : state.session.config.difficulty === 'challenge' ? '정답을 직접 써 보세요' : '알맞은 답을 골라요'}</p>
             <h1 ref={questionHeading} tabIndex={-1} className={state.session.currentQuestion.kind === 'math' ? 'math-prompt' : 'word-prompt'}>{state.session.currentQuestion.prompt}</h1>
+            {hasMathVisual(state.session.currentQuestion) && state.session.currentQuestion.difficulty !== 'easy' && (
+              <button className="math-hint-button" type="button" aria-expanded={mathHintVisible} onClick={() => setMathHintVisible((visible) => !visible)}>
+                <span aria-hidden="true">▦</span>{mathHintVisible ? '그림 힌트 닫기' : '그림 힌트 보기'}
+              </button>
+            )}
+            <MathVisual question={state.session.currentQuestion} revealed={mathHintVisible} />
+            {typeof state.session.currentQuestion.metadata?.wordId === 'string'
+              && questionConceptIds[state.session.currentQuestion.metadata.wordId]
+              && (state.session.currentQuestion.kind !== 'listening' || state.session.questionStatus === 'feedback')
+              && <ConceptPicture conceptId={questionConceptIds[state.session.currentQuestion.metadata.wordId]} className="question-concept-picture" />}
             {state.session.currentQuestion.hint && <p className="question-hint">{state.session.currentQuestion.hint}</p>}
             {state.session.currentQuestion.kind === 'listening' && (
               <button className={`listen-button ${speechState === 'speaking' ? 'is-speaking' : ''}`} onClick={replay} disabled={speechState === 'speaking'}>
@@ -519,8 +563,8 @@ function App() {
       )}
 
       {state.screen === 'result' && state.latestResult && (
-        <main className="screen result-screen">
-          <div className="result-burst" aria-hidden="true">★</div>
+        <main className={`screen result-screen ${state.latestReview.length ? 'has-review' : ''}`}>
+          <div className="result-burst result-guide-wrap" aria-hidden="true"><GuideCharacter className="result-guide" decorative /></div>
           <p className="eyebrow">오늘의 학습 끝!</p>
           <h1>{state.latestResult.correctCount} / {state.latestResult.totalCount}</h1>
           <p className="result-message">{resultMessage(state.latestResult.correctCount / state.latestResult.totalCount)}</p>
@@ -535,6 +579,27 @@ function App() {
             <button className="secondary-button" onClick={() => dispatch({ type: 'SELECT_MODE', mode: state.latestResult!.config.mode })}>난이도 바꾸기</button>
             <button className="text-button" onClick={() => dispatch({ type: 'GO_HOME' })}>처음으로</button>
           </div>
+          {state.latestResult.config.subject === 'math' && state.latestReview.length > 0 && (
+            <section className="review-section" aria-labelledby="review-heading">
+              <div className="review-heading-row">
+                <div><p className="eyebrow">한 번 더 살펴봐요</p><h2 id="review-heading">다시 보면 더 잘 기억나요</h2></div>
+                <span>{state.latestReview.length}문제</span>
+              </div>
+              <ol className="review-list">
+                {state.latestReview.map((item, index) => (
+                  <li key={item.questionId} className="review-card">
+                    <div className="review-card-top"><span>{index + 1}</span><small>{item.resolution === 'timeout' ? '시간이 지난 문제' : '다시 볼 문제'}</small></div>
+                    <strong className="review-prompt">{item.prompt}</strong>
+                    <dl className="review-answers">
+                      <div><dt>내 답</dt><dd>{item.selectedAnswer ?? '고르기 전에 시간이 지났어요'}</dd></div>
+                      <div><dt>정답</dt><dd>{item.correctAnswer}</dd></div>
+                    </dl>
+                    <p className="review-explanation"><span aria-hidden="true">💡</span>{item.explanation}</p>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
           {needRefresh && <UpdateNotice onUpdate={() => void updateServiceWorker(true)} />}
         </main>
       )}

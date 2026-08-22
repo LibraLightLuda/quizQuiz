@@ -69,19 +69,38 @@ test('수학 사칙연산 탭에서 혼합 문제가 출제된다', async ({ pag
   await expect(page.locator('.option-button')).toHaveCount(3);
 });
 
-test('수학 쉬움 15문제를 풀고 결과와 저장 기록까지 간다', async ({ page }) => {
+test('수학 쉬움 15문제를 풀고 결과의 오답 복습과 저장 기록까지 간다', async ({ page }) => {
   await start(page, /수학 더하고/, /^덧셈 /);
+  let reviewPrompt = '';
+  let selectedWrongAnswer = '';
+  let reviewCorrectAnswer = '';
   for (let index = 0; index < SESSION_LENGTH; index += 1) {
     const prompt = await page.locator('.question-card h1').innerText();
     const answer = prompt.match(/\d+/g)!.map(Number).reduce((sum, value) => sum + value, 0);
-    await page.getByRole('button', { name: String(answer), exact: true }).click();
+    if (index === 0) {
+      const labels = await page.locator('.option-button').allInnerTexts();
+      selectedWrongAnswer = labels.find((label) => label.trim() !== String(answer))!.trim();
+      reviewPrompt = prompt;
+      reviewCorrectAnswer = String(answer);
+      await page.getByRole('button', { name: selectedWrongAnswer, exact: true }).click();
+    } else {
+      await page.getByRole('button', { name: String(answer), exact: true }).click();
+    }
     if (index < SESSION_LENGTH - 1) {
       await expect(page.getByText(`${index + 2} / ${SESSION_LENGTH}`)).toBeVisible({ timeout: 3000 });
     }
   }
-  await expect(page.getByRole('heading', { name: '15 / 15' })).toBeVisible({ timeout: 3000 });
+  await expect(page.getByRole('heading', { name: '14 / 15' })).toBeVisible({ timeout: 3000 });
+  await expect(page.locator('.review-card')).toHaveCount(1);
+  const reviewCard = page.locator('.review-card').first();
+  await expect(reviewCard).toContainText(reviewPrompt);
+  await expect(reviewCard).toContainText(selectedWrongAnswer);
+  await expect(reviewCard).toContainText(reviewCorrectAnswer);
+  await expect(reviewCard.getByText('다시 볼 문제')).toBeVisible();
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('numbercal.history.v1') ?? '{}'));
   expect(stored.sessions[0].totalCount).toBe(15);
+  expect(stored.sessions[0].incorrectCount).toBe(1);
+  expect(stored.sessions[0].reviewItems).toBeUndefined();
 });
 
 test('도전 수학은 보기 없이 숫자를 직접 입력해 정답을 맞힌다', async ({ page }) => {
@@ -164,6 +183,99 @@ test('320×568 화면에서 도전 입력 UI가 가로로 넘치지 않는다', 
   await start(page, /영어 영어 단어/, /철자 채우기/, /도전 초4/);
   await expect(page.getByLabel('내 정답')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+});
+
+test('모바일 홈은 오늘의 추천과 어린이용 학습 타일을 먼저 보여 준다', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: /어린이 학습 놀이터/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: '오늘의 추천 이야기 탐험대 시작하기' })).toBeVisible();
+  await expect(page.locator('.home-guide')).toBeVisible();
+  await expect(page.locator('.subject-grid .subject-card')).toHaveCount(6);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+});
+
+test('수학 쉬움에는 문제를 바꾸지 않는 수량 그림이 보인다', async ({ page }) => {
+  await start(page, /수학 더하고/, /^덧셈 /, /쉬움 초1/);
+  const prompt = await page.locator('.question-card h1').innerText();
+  await expect(page.locator('.math-visual')).toBeVisible();
+  await expect(page.locator('.math-visual')).toHaveAttribute('aria-label', /개와 .*개를 더하는 그림/);
+  await expect(page.locator('.math-visual')).toContainText('10칸 모형');
+  await expect(page.locator('.question-card h1')).toHaveText(prompt);
+});
+
+test('수학 보통은 요청할 때만 자릿값 그림 힌트를 보여 준다', async ({ page }) => {
+  await start(page, /수학 더하고/, /^덧셈 /, /보통 초2/);
+  const prompt = await page.locator('.question-card h1').innerText();
+  await expect(page.locator('.math-visual')).toHaveCount(0);
+  const hintButton = page.getByRole('button', { name: '그림 힌트 보기' });
+  await expect(hintButton).toHaveAttribute('aria-expanded', 'false');
+  await hintButton.click();
+  await expect(page.locator('.math-visual')).toBeVisible();
+  await expect(page.getByRole('button', { name: '그림 힌트 닫기' })).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.math-visual')).toContainText('십 묶음');
+  await expect(page.locator('.question-card h1')).toHaveText(prompt);
+});
+
+test('한국어·영어 개념 그림 284개가 모바일용 크기로 선명하게 열린다', async ({ page }) => {
+  await page.goto('/');
+  const conceptNames = [
+    'apple', 'puppy', 'library', 'happy', 'school', 'friend', 'family', 'teacher',
+    'morning', 'evening', 'spring', 'autumn', 'pencil', 'umbrella', 'hospital',
+    'firefighter', 'chef', 'wise', 'strong', 'kind', 'proverb', 'diary', 'promise',
+    'courage', 'small', 'large', 'fast', 'slow', 'laugh', 'listen', 'write', 'learn',
+    'playground', 'tiger', 'frog', 'turtle', 'penguin', 'squirrel', 'eraser', 'classroom',
+    'potato', 'carrot', 'rainbow', 'dolphin', 'kangaroo', 'sandwich', 'chocolate',
+    'astronaut', 'veterinarian', 'photographer',
+    'water', 'bread', 'grape', 'lemon', 'pizza', 'candy', 'juice', 'peach',
+    'horse', 'sheep', 'mouse', 'panda', 'whale', 'snake', 'chair', 'paper', 'ruler',
+    'green', 'white', 'black', 'brown', 'cloud', 'river', 'ocean', 'house', 'park',
+    'store', 'room', 'smile', 'sleep', 'dance',
+    'car', 'bicycle', 'airplane', 'train', 'bus', 'blackboard', 'desk', 'colored-pencils',
+    'chick', 'gimbap', 'tteokbokki', 'corn', 'sun', 'moon', 'starlight', 'flower-garden',
+    'stream', 'scarf', 'gloves', 'toothpaste', 'towel', 'clock', 'mirror',
+    'flower', 'father', 'mother', 'sister', 'brother', 'student', 'rabbit', 'monkey',
+    'chicken', 'giraffe', 'hamster', 'orange', 'banana', 'cookie', 'cheese', 'tomato',
+    'noodle', 'window', 'kitchen', 'garden', 'lesson', 'picture', 'summer', 'winter',
+    'school-field', 'cafeteria', 'art-class', 'school-noticebook', 'dictation', 'zoo',
+    'polar-bear', 'mole', 'firefly', 'spring-breeze', 'sudden-shower', 'snowman',
+    'sunflower', 'dandelion', 'leaf', 'traffic-light', 'crosswalk', 'post-office',
+    'fire-station', 'appointment-time', 'grandfather', 'grandmother', 'younger-cousin',
+    'neighbor', 'rice-ball', 'yogurt', 'bean-sprouts', 'tangerine-peel',
+    'elephant', 'butterfly', 'crocodile', 'octopus', 'flamingo', 'seahorse',
+    'breakfast', 'pancake', 'vegetable', 'mushroom', 'spaghetti', 'computer',
+    'notebook', 'question', 'homework', 'language', 'science', 'calendar',
+    'mountain', 'sunshine', 'snowflake', 'waterfall', 'island', 'forest',
+    'weather', 'station', 'museum', 'ice-cream', 'science-experiment', 'sports-day',
+    'class-meeting', 'school-supplies', 'reading-log', 'presentation-time',
+    'morning-sunlight', 'sunset-glow', 'milky-way', 'water-drop', 'pine-cone',
+    'garden-balsam', 'public-transport', 'seat-belt', 'recyclables', 'waste-sorting',
+    'laundry-basket', 'microwave', 'street-cleaner', 'driver', 'children-author',
+    'red-squirrel', 'orangutan', 'lizard', 'stag-beetle', 'sea-turtle', 'baby-goat',
+    'spicy-noodles', 'candied-sweet-potato', 'rolled-omelet', 'seaweed-soup',
+    'stir-fried-vegetables', 'fruit-salad',
+    'strawberry', 'dictionary', 'restaurant', 'adventure', 'beautiful', 'different',
+    'important', 'wonderful', 'carefully', 'together', 'sometimes', 'yesterday',
+    'tomorrow', 'afternoon', 'wednesday', 'scientist', 'musician', 'engineer',
+    'librarian', 'environment', 'earthquake', 'temperature', 'electricity', 'ecosystem',
+    'recycling', 'continent', 'universe', 'supermarket', 'bookstore', 'helicopter',
+    'ambulance', 'submarine', 'spaceship', 'nature-observation', 'field-trip',
+    'group-activity', 'study-plan', 'book-discussion', 'science-museum', 'global-warming',
+    'thunder-lightning', 'sea-level', 'freshwater-fish', 'forest-protection',
+    'traffic-safety', 'personal-information', 'emergency-contacts', 'daily-habits',
+    'energy-saving', 'public-facility', 'cultural-guide', 'weather-forecaster', 'paramedic',
+    'software-developer', 'cultural-restorer', 'endangered-species',
+    'migratory-bird-habitat', 'food-chain', 'hibernation', 'camouflage', 'amphibian',
+    'nutrients', 'fermented-food', 'food-storage', 'seasonal-fruit', 'balanced-meal',
+    'traditional-food'
+  ];
+  const decoded = await page.evaluate(async (names) => Promise.all(names.map(async (name) => {
+    const image = new Image();
+    image.src = new URL(`illustrations/concepts/${name}.webp`, document.baseURI).href;
+    await image.decode();
+    return { name, width: image.naturalWidth, height: image.naturalHeight };
+  })), conceptNames);
+  expect(decoded).toEqual(conceptNames.map((name) => ({ name, width: 512, height: 512 })));
 });
 
 test('PC 홈 화면의 학습 카드가 같은 크기로 3열 정렬된다', async ({ page }) => {

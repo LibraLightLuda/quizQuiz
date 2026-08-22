@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { playSuccessSound, unlockAudio } from '../services/soundService';
+import { SudokuCompleteVisual, SudokuRuleVisual, SudokuToolIcon, type SudokuRuleFocus } from './SudokuVisuals';
 
 interface SudokuTutorialProps {
   onBack: () => void;
@@ -14,7 +15,7 @@ interface TutorialStep {
   clue: string;
   targetIndex: number;
   answer: number;
-  focus: 'row' | 'column' | 'box' | 'all';
+  focus: SudokuRuleFocus;
 }
 
 const solution = [
@@ -51,6 +52,7 @@ function SudokuTutorial({ onBack, onStartBeginner, soundEnabled }: SudokuTutoria
   const [stepIndex, setStepIndex] = useState(0);
   const [solved, setSolved] = useState(false);
   const [tried, setTried] = useState<number[]>([]);
+  const [lastTried, setLastTried] = useState<number | null>(null);
   const [message, setMessage] = useState('노란 빈칸에 들어갈 숫자를 골라보세요.');
   const step = tutorialSteps[stepIndex];
   const board = solution.map((value, index) => index === step.targetIndex && !solved ? 0 : value);
@@ -65,9 +67,11 @@ function SudokuTutorial({ onBack, onStartBeginner, soundEnabled }: SudokuTutoria
     void unlockAudio();
     if (number !== step.answer) {
       setTried((values) => [...values, number]);
-      setMessage(`${number}은(는) 이미 보이는지 다시 살펴봐요. 괜찮아요, 한 번 더 생각해 봐요!`);
+      setLastTried(number);
+      setMessage(`${number}은(는) 같은 ${step.focus === 'row' ? '가로줄' : step.focus === 'column' ? '세로줄' : step.focus === 'box' ? '작은 상자' : '가로·세로·상자'}에서 겹쳐요. 표시된 숫자를 확인해 봐요!`);
       return;
     }
+    setLastTried(null);
     setSolved(true);
     setMessage(stepIndex === tutorialSteps.length - 1 ? '세 가지 약속을 모두 지켰어요!' : `${step.rule} 규칙을 정확히 찾았어요!`);
     if (soundEnabled) playSuccessSound();
@@ -77,6 +81,7 @@ function SudokuTutorial({ onBack, onStartBeginner, soundEnabled }: SudokuTutoria
     setStepIndex((value) => value + 1);
     setSolved(false);
     setTried([]);
+    setLastTried(null);
     setMessage('노란 빈칸에 들어갈 숫자를 골라보세요.');
   };
 
@@ -95,6 +100,8 @@ function SudokuTutorial({ onBack, onStartBeginner, soundEnabled }: SudokuTutoria
         <p>{step.instruction}<br /><strong>{step.clue}</strong></p>
       </section>
 
+      <SudokuRuleVisual focus={step.focus} />
+
       <div className="tutorial-rule-pills" aria-label="스도쿠의 세 가지 규칙">
         <span className={step.focus === 'row' || step.focus === 'all' ? 'active' : ''}>↔ 가로</span>
         <span className={step.focus === 'column' || step.focus === 'all' ? 'active' : ''}>↕ 세로</span>
@@ -112,9 +119,11 @@ function SudokuTutorial({ onBack, onStartBeginner, soundEnabled }: SudokuTutoria
             const focused = (step.focus === 'row' && inRow) || (step.focus === 'column' && inColumn)
               || (step.focus === 'box' && inBox) || (step.focus === 'all' && (inRow || inColumn || inBox));
             const target = index === step.targetIndex;
+            const conflictSource = lastTried !== null && value === lastTried && focused && !target;
             const classes = ['tutorial-cell', focused ? 'focused' : '', target ? 'target' : '', target && solved ? 'solved' : '',
+              conflictSource ? 'conflict-source' : '', target && lastTried !== null ? 'conflict-target' : '',
               column === 1 ? 'box-right' : '', row === 1 ? 'box-bottom' : ''].filter(Boolean).join(' ');
-            return <div key={index} role="gridcell" className={classes} aria-label={`${row + 1}행 ${column + 1}열, ${value ? `숫자 ${value}` : '빈칸'}`}>{value || '?'}</div>;
+            return <div key={index} role="gridcell" className={classes} aria-label={`${row + 1}행 ${column + 1}열, ${value ? `숫자 ${value}` : '빈칸'}${conflictSource ? ', 겹치는 숫자' : ''}`}>{value || '?'}{conflictSource && <span className="tutorial-conflict-mark" aria-hidden="true">×</span>}</div>;
           })}
         </div>
       </div>
@@ -130,8 +139,13 @@ function SudokuTutorial({ onBack, onStartBeginner, soundEnabled }: SudokuTutoria
       {solved && !complete && <button className="primary-button tutorial-next" onClick={next}>다음 규칙 배우기</button>}
       {complete && (
         <section className="tutorial-complete">
-          <span aria-hidden="true">🏅</span><h2>이제 스도쿠 준비 완료!</h2>
+          <SudokuCompleteVisual /><h2>이제 스도쿠 준비 완료!</h2>
           <p>빈칸마다 가로, 세로, 굵은 선 상자를 확인하면 돼요. 답을 찍기보다 들어갈 수 없는 숫자부터 하나씩 지워보세요.</p>
+          <div className="tutorial-tool-guide" aria-label="스도쿠 도구 사용법">
+            <div><SudokuToolIcon kind="erase" /><span><strong>지우기</strong><small>내가 넣은 숫자만 지워요</small></span></div>
+            <div><SudokuToolIcon kind="hint" /><span><strong>힌트</strong><small>막힐 때 한 칸을 도와줘요</small></span></div>
+            <div><SudokuToolIcon kind="refresh" /><span><strong>새 퍼즐</strong><small>확인한 뒤 새 판을 열어요</small></span></div>
+          </div>
           <button className="primary-button" onClick={onStartBeginner}>첫걸음 4×4 시작하기</button>
           <button className="secondary-button" onClick={onBack}>난이도 고르기</button>
         </section>

@@ -28,6 +28,7 @@ describe('학습 상태 reducer', () => {
     state = appReducer(state, { type: 'READY', questionId: question.id, now: 100 });
     state = appReducer(state, { type: 'RESOLVE', questionId: question.id, optionId: question.correctOptionId, now: 101 + QUESTION_TIME_MS, praise: '정답!', gentle: '괜찮아요!' });
     expect(state.session?.answers[0].resolution).toBe('timeout');
+    expect(state.session?.reviewItems[0]).toEqual(expect.objectContaining({ resolution: 'timeout', selectedAnswer: null }));
   });
 
   it('deadline과 같은 시각의 선택은 정답으로 인정한다', () => {
@@ -37,6 +38,32 @@ describe('학습 상태 reducer', () => {
     state = appReducer(state, { type: 'READY', questionId: question.id, now: 100 });
     state = appReducer(state, { type: 'RESOLVE', questionId: question.id, optionId: question.correctOptionId, now: 100 + QUESTION_TIME_MS, praise: '정답!', gentle: '괜찮아요!' });
     expect(state.session?.answers[0].resolution).toBe('correct');
+  });
+
+  it('수학 오답의 문제와 내 답과 정답을 결과 복습용으로 보관한다', () => {
+    const question = makeQuestion();
+    const wrongOption = question.options.find((option) => option.id !== question.correctOptionId)!;
+    const correctOption = question.options.find((option) => option.id === question.correctOptionId)!;
+    let state = createInitialState(DEFAULT_SETTINGS, []);
+    state = appReducer(state, { type: 'START_SESSION', question, config: DEFAULT_SETTINGS.lastConfig });
+    state = appReducer(state, { type: 'READY', questionId: question.id, now: 100 });
+    state = appReducer(state, { type: 'RESOLVE', questionId: question.id, optionId: wrongOption.id, now: 200, praise: '정답!', gentle: '괜찮아요!' });
+    expect(state.session?.reviewItems).toEqual([expect.objectContaining({
+      prompt: question.prompt,
+      selectedAnswer: wrongOption.label,
+      correctAnswer: correctOption.label,
+      explanation: question.explanation,
+      resolution: 'incorrect'
+    })]);
+    state = appReducer(state, {
+      type: 'ADVANCE', questionId: question.id, nextQuestion: null,
+      summary: {
+        id: 'review-session', completedAt: '2026-08-22T00:00:00.000Z', config: DEFAULT_SETTINGS.lastConfig,
+        correctCount: 0, incorrectCount: 1, timeoutCount: 0, totalCount: 1, averageResponseMs: 100
+      }
+    });
+    expect(state.screen).toBe('result');
+    expect(state.latestReview).toHaveLength(1);
   });
 
   it('timeout이 먼저 확정되면 뒤따른 선택을 무시한다', () => {

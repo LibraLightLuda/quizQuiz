@@ -1,4 +1,4 @@
-import type { AppState, Screen } from './appState';
+import type { AppState, ReviewItem, Screen } from './appState';
 import type { AnswerRecord, Question, Resolution, SessionConfig, SessionSummary, Settings, Subject, Mode } from '../domain/types';
 import { createId } from '../services/randomService';
 import { modesForSubject, QUESTION_TIME_MS } from '../domain/difficulty';
@@ -15,7 +15,7 @@ export type AppAction =
   | { type: 'START_SESSION'; question: Question; config: SessionConfig }
   | { type: 'REPLACE_QUESTION'; questionId: string; question: Question; config: SessionConfig }
   | { type: 'READY'; questionId: string; now: number }
-  | { type: 'RESOLVE'; questionId: string; optionId: string | null; now: number; deadlineExpired?: boolean; praise: string; gentle: string }
+  | { type: 'RESOLVE'; questionId: string; optionId: string | null; selectedAnswer?: string; now: number; deadlineExpired?: boolean; praise: string; gentle: string }
   | { type: 'ADVANCE'; questionId: string; nextQuestion: Question | null; summary?: SessionSummary }
   | { type: 'PAUSE'; now: number }
   | { type: 'RESUME'; now: number }
@@ -25,7 +25,7 @@ export type AppAction =
 
 export const createInitialState = (settings: Settings, history: SessionSummary[]): AppState => ({
   screen: 'home', returnScreen: 'home', settings, history,
-  draftConfig: settings.lastConfig, session: null, latestResult: null
+  draftConfig: settings.lastConfig, session: null, latestResult: null, latestReview: []
 });
 
 const resolve = (state: AppState, action: Extract<AppAction, { type: 'RESOLVE' }>): AppState => {
@@ -49,11 +49,23 @@ const resolve = (state: AppState, action: Extract<AppAction, { type: 'RESOLVE' }
     ? ` ⭐ ${streak}문제 연속 성공!`
     : '';
   const feedbackText = timedOut ? '시간이 다 되었어요. 정답을 같이 볼까요?' : correct ? `${action.praise}${special}` : action.gentle;
+  const correctOption = session.currentQuestion.options.find((option) => option.id === session.currentQuestion.correctOptionId);
+  const selectedOption = session.currentQuestion.options.find((option) => option.id === action.optionId);
+  const reviewItems: ReviewItem[] = !correct && session.config.subject === 'math'
+    ? [...session.reviewItems, {
+      questionId: session.currentQuestion.id,
+      prompt: session.currentQuestion.prompt,
+      selectedAnswer: timedOut ? null : action.selectedAnswer ?? selectedOption?.label ?? null,
+      correctAnswer: correctOption?.label ?? session.currentQuestion.explanation,
+      explanation: session.currentQuestion.explanation,
+      resolution: timedOut ? 'timeout' : 'incorrect'
+    }]
+    : session.reviewItems;
 
   return {
     ...state,
     session: {
-      ...session, questionStatus: 'feedback', answers: [...session.answers, answer], streak,
+      ...session, questionStatus: 'feedback', answers: [...session.answers, answer], reviewItems, streak,
       selectedOptionId: timedOut ? null : action.optionId, resolution, feedbackText, deadline: null
     }
   };
@@ -61,7 +73,7 @@ const resolve = (state: AppState, action: Extract<AppAction, { type: 'RESOLVE' }
 
 export const appReducer = (state: AppState, action: AppAction): AppState => {
   switch (action.type) {
-    case 'GO_HOME': return { ...state, screen: 'home', session: null, latestResult: null };
+    case 'GO_HOME': return { ...state, screen: 'home', session: null, latestResult: null, latestReview: [] };
     case 'OPEN_SETTINGS': return { ...state, screen: 'settings', returnScreen: action.from };
     case 'CLOSE_SETTINGS': return { ...state, screen: state.returnScreen };
     case 'SELECT_SUBJECT': {
@@ -80,9 +92,10 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       ...state,
       screen: 'session',
       latestResult: null,
+      latestReview: [],
       session: {
         id: createId('session'), config: action.config, questionIndex: 0, currentQuestion: action.question,
-        questionStatus: 'presenting', answers: [], recentSignatures: [action.question.signature], recentAnswers: [],
+        questionStatus: 'presenting', answers: [], reviewItems: [], recentSignatures: [action.question.signature], recentAnswers: [],
         recentCorrectIndices: [],
         streak: 0, selectedOptionId: null, resolution: null, feedbackText: '', startedAt: null, elapsedMs: 0,
         deadline: null, limitMs: null, remainingMs: null, paused: false
@@ -113,7 +126,7 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       const session = state.session;
       if (!session || session.questionStatus !== 'feedback' || session.currentQuestion.id !== action.questionId) return state;
       if (!action.nextQuestion && action.summary) {
-        return { ...state, screen: 'result', session: null, latestResult: action.summary };
+        return { ...state, screen: 'result', session: null, latestResult: action.summary, latestReview: session.reviewItems };
       }
       if (!action.nextQuestion) return state;
       const previousAnswer = Number(session.currentQuestion.metadata?.answer);

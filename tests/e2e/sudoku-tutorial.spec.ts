@@ -9,20 +9,30 @@ test('4단계 튜토리얼에서 가로·세로·상자 규칙을 직접 연습�
   await enterSudoku(page);
   await page.getByRole('button', { name: /처음이라면 규칙 연습/ }).click();
   await expect(page.getByRole('heading', { name: '가로로 같은 숫자는 한 번만' })).toBeVisible();
+  await expect(page.getByLabel('가로줄을 왼쪽에서 오른쪽으로 살펴봐요 규칙 그림')).toBeVisible();
   await expect(page.getByRole('grid', { name: '4×4 스도쿠 규칙 예시' })).toBeVisible();
 
   await page.getByRole('button', { name: '튜토리얼 숫자 1' }).click();
-  await expect(page.getByText(/이미 보이는지 다시 살펴봐요/)).toBeVisible();
+  await expect(page.getByText(/같은 가로줄에서 겹쳐요/)).toBeVisible();
+  await expect(page.getByRole('gridcell', { name: '1행 1열, 숫자 1, 겹치는 숫자' })).toBeVisible();
   await expect(page.getByRole('button', { name: '튜토리얼 숫자 1' })).toBeDisabled();
 
-  for (const answer of [3, 2, 4]) {
+  const steps = [
+    [3, '세로줄을 위에서 아래로 살펴봐요 규칙 그림'],
+    [2, '굵은 선으로 묶인 작은 상자를 살펴봐요 규칙 그림'],
+    [4, '가로줄, 세로줄, 작은 상자를 차례로 확인해요 규칙 그림']
+  ] as const;
+  for (const [answer, nextVisual] of steps) {
     await page.getByRole('button', { name: `튜토리얼 숫자 ${answer}` }).click();
     await page.getByRole('button', { name: '다음 규칙 배우기' }).click();
+    await expect(page.getByLabel(nextVisual)).toBeVisible();
   }
   await expect(page.getByRole('heading', { name: '가로·세로·상자를 함께 살펴봐요' })).toBeVisible();
   await page.getByRole('button', { name: '튜토리얼 숫자 3' }).click();
 
   await expect(page.getByRole('heading', { name: '이제 스도쿠 준비 완료!' })).toBeVisible();
+  await expect(page.getByLabel('스도쿠 도구 사용법')).toContainText('내가 넣은 숫자만 지워요');
+  await expect(page.getByLabel('스도쿠 도구 사용법')).toContainText('막힐 때 한 칸을 도와줘요');
   await expect(page.getByText(/4×4는 1~4.*9×9는 1~9/)).toBeVisible();
   await expect(page.getByRole('button', { name: '첫걸음 4×4 시작하기' })).toBeVisible();
 });

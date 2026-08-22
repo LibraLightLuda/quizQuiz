@@ -11,9 +11,13 @@ import {
   saveMemoryProgress
 } from './memoryStorage';
 import type { MemoryDifficulty, MemoryMode as MemoryModeType, MemoryProgress, MemoryResult } from './types';
+import { GuideCharacter } from '../visuals/GuideCharacter';
+import { LearningIcon } from '../visuals/LearningIcon';
+import { MemoryCardVisual } from '../visuals/MemoryCardVisual';
+import { getMemoryAchievementStatuses, getNewMemoryAchievementIds, memoryRecordSummary } from './memoryAchievements';
 import './memory.css';
 
-type MemoryScreen = 'levels' | 'play' | 'result';
+type MemoryScreen = 'levels' | 'play' | 'result' | 'collection';
 
 interface MemoryModeProps {
   onExit: () => void;
@@ -115,6 +119,7 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled }: MemoryModeProps
     const accuracy = completed.attempts ? Math.round((completed.correctAttempts / completed.attempts) * 100) : 100;
     const stars = calculateStars(pairCount, completed.attempts);
     const saved = saveMemoryCompletion(records, completed, finishTime, accuracy, stars);
+    const newAchievementIds = getNewMemoryAchievementIds(records, saved.records);
     setRecords(saved.records);
     if (!saved.saved || !clearMemoryProgress()) setStorageWarning(true);
     setSavedProgress(null);
@@ -130,7 +135,8 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled }: MemoryModeProps
       isBestTime: saved.isBestTime,
       isBestAttempts: saved.isBestAttempts,
       daily: completed.daily,
-      earnedDailyBadge: saved.earnedDailyBadge
+      earnedDailyBadge: saved.earnedDailyBadge,
+      newAchievementIds
     });
     setCelebrate(true);
     if (soundEnabled) playSuccessSound();
@@ -167,7 +173,8 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled }: MemoryModeProps
     setLocked(true);
 
     if (matched) {
-      setMessage(nextCombo >= 2 ? `연속 ${nextCombo}번 성공! 기억력 콤보!` : praiseMessages[checked.correctAttempts % praiseMessages.length]);
+      const relation = `${first.content} ↔ ${second.content}`;
+      setMessage(nextCombo >= 2 ? `${relation} · 연속 ${nextCombo}번 성공!` : `${relation} · ${praiseMessages[checked.correctAttempts % praiseMessages.length]}`);
       setCelebrate(true);
       if (soundEnabled) playSuccessSound();
       revealTimer.current = window.setTimeout(() => {
@@ -242,9 +249,9 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled }: MemoryModeProps
                 aria-label={flipped ? `${card.content}, ${categoryLabels[card.category]} 카드${matched ? ', 맞춘 카드' : ''}` : `${index + 1}번 카드 뒤집기`}
               >
                 <span className="memory-card-inner">
-                  <span className="memory-card-back" aria-hidden="true"><i>?</i><small>{index + 1}</small></span>
+                  <span className="memory-card-back" aria-hidden="true"><i><LearningIcon name="memory" /></i><small>{index + 1}</small></span>
                   <span className={`memory-card-front memory-category-${card.category}`} aria-hidden={!flipped}>
-                    <small>{categoryLabels[card.category]}</small><strong>{card.content}</strong>
+                    <small>{categoryLabels[card.category]}</small><span className="memory-card-content"><MemoryCardVisual card={card} /><strong>{card.content}</strong></span>
                   </span>
                 </span>
               </button>
@@ -257,6 +264,8 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled }: MemoryModeProps
   }
 
   if (screen === 'result' && result) {
+    const newAchievements = getMemoryAchievementStatuses(records)
+      .filter((achievement) => result.newAchievementIds.includes(achievement.id));
     return (
       <main className="screen memory-result-screen">
         <div className="memory-result-burst" aria-hidden="true">🏆</div>
@@ -264,6 +273,12 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled }: MemoryModeProps
         <h1>{result.isBestTime || result.isBestAttempts ? '새로운 최고 기록!' : '기억력 챌린지 성공!'}</h1>
         <div className="memory-stars" aria-label={`${result.stars}개의 별 획득`}>{'★'.repeat(result.stars)}<span>{'★'.repeat(3 - result.stars)}</span></div>
         {result.earnedDailyBadge && <div className="daily-badge"><span>🌟</span><strong>오늘의 특별 배지</strong><small>매일 도전한 멋진 기억력 탐험가!</small></div>}
+        {newAchievements.length > 0 && (
+          <section className="memory-new-achievements" aria-label="새로 얻은 배지">
+            <p>새 배지를 찾았어요!</p>
+            <div>{newAchievements.map((achievement) => <span key={achievement.id}><i aria-hidden="true">{achievement.icon}</i><strong>{achievement.title}</strong></span>)}</div>
+          </section>
+        )}
         <section className="memory-result-stats" aria-label="게임 결과">
           <div><small>완료 시간</small><strong>{formatMemoryTime(result.elapsedMs)}</strong>{result.isBestTime && <em>최고!</em>}</div>
           <div><small>시도 횟수</small><strong>{result.attempts}번</strong>{result.isBestAttempts && <em>최소!</em>}</div>
@@ -272,8 +287,42 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled }: MemoryModeProps
         <div className="memory-result-actions">
           <button className="primary-button" onClick={() => startGame(result.mode, result.difficulty, result.daily)}>다시 하기</button>
           <button className="secondary-button" onClick={() => setScreen('levels')}>다른 모드 도전</button>
+          <button className="secondary-button" onClick={() => setScreen('collection')}>내 배지 도감 보기</button>
           <button className="text-button" onClick={onExit}>홈으로 이동</button>
         </div>
+      </main>
+    );
+  }
+
+  if (screen === 'collection') {
+    const achievements = getMemoryAchievementStatuses(records);
+    const summary = memoryRecordSummary(records);
+    const unlockedCount = achievements.filter((achievement) => achievement.unlocked).length;
+    return (
+      <main className="screen memory-collection-screen">
+        <header className="top-bar"><button className="icon-button" onClick={() => setScreen('levels')} aria-label="단계 선택으로 돌아가기">←</button><strong>내 배지 도감</strong><span /></header>
+        <section className="memory-collection-hero">
+          <div aria-hidden="true">🏅</div>
+          <span><p className="eyebrow">연결할수록 채워져요</p><h1>{unlockedCount} / {achievements.length}개 발견!</h1><small>잠긴 배지도 어떻게 얻는지 살펴볼 수 있어요.</small></span>
+        </section>
+        <section className="memory-collection-summary" aria-label="기억력 챌린지 모은 기록">
+          <div><strong>{summary.totalStars}</strong><small>모은 별</small></div>
+          <div><strong>{summary.completedCount}</strong><small>완료 횟수</small></div>
+          <div><strong>{summary.completedModes} / 4</strong><small>도전 모드</small></div>
+          <div><strong>{summary.dailyCount}</strong><small>일일 배지</small></div>
+        </section>
+        <div className="memory-collection-progress" aria-label={`배지 ${achievements.length}개 중 ${unlockedCount}개 획득`}><span style={{ width: `${(unlockedCount / achievements.length) * 100}%` }} /></div>
+        <section className="memory-badge-grid" aria-label="기억력 배지 목록">
+          {achievements.map((achievement) => (
+            <article key={achievement.id} className={achievement.unlocked ? 'is-unlocked' : 'is-locked'}>
+              <i aria-hidden="true">{achievement.unlocked ? achievement.icon : '🔒'}</i>
+              <strong>{achievement.title}</strong>
+              <p>{achievement.description}</p>
+              <small>{achievement.unlocked ? '배지 획득!' : `${achievement.progress} / ${achievement.target}`}</small>
+            </article>
+          ))}
+        </section>
+        <button className="primary-button memory-collection-back" onClick={() => setScreen('levels')}>다음 도전 고르기</button>
       </main>
     );
   }
@@ -284,7 +333,7 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled }: MemoryModeProps
     <main className="screen memory-level-screen">
       <header className="top-bar"><button className="icon-button" onClick={onExit} aria-label="홈으로 돌아가기">←</button><strong>기억력 챌린지</strong><span /></header>
       <section className="memory-hero">
-        <div aria-hidden="true">🧠</div>
+        <GuideCharacter className="memory-guide" decorative />
         <span><p className="eyebrow">뜻이 통하는 두 장을 찾아요</p><h1>놀면서 배우는<br />기억력 게임</h1></span>
       </section>
       {savedProgress && (
@@ -297,12 +346,17 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled }: MemoryModeProps
         <span><strong>오늘의 기억력 챌린지</strong><small>{todayCompleted ? '오늘의 배지를 받았어요! 다시 도전할까요?' : '매일 새로운 통합 카드 · 완료하면 특별 배지'}</small></span>
         <b>{todayCompleted ? '완료' : '추천'}</b>
       </button>
+      <button className="memory-collection-card" onClick={() => setScreen('collection')}>
+        <span aria-hidden="true">🏅</span>
+        <span><strong>내 배지 도감</strong><small>{getMemoryAchievementStatuses(records).filter((item) => item.unlocked).length} / {getMemoryAchievementStatuses(records).length}개 발견 · 모은 별 {memoryRecordSummary(records).totalStars}개</small></span>
+        <b aria-hidden="true">›</b>
+      </button>
       <fieldset className="memory-option-section">
         <legend>어떤 카드로 놀까요?</legend>
         <div className="memory-mode-grid">
           {MEMORY_MODES.map((item) => {
             const info = memoryModeInfo[item];
-            return <button key={item} role="radio" aria-checked={mode === item} className={mode === item ? 'active' : ''} onClick={() => setMode(item)}><i aria-hidden="true">{info.icon}</i><span><strong>{info.label}</strong><small>{info.description}</small></span>{item === 'mixed' && <em>추천</em>}</button>;
+            return <button key={item} role="radio" aria-checked={mode === item} className={mode === item ? 'active' : ''} onClick={() => setMode(item)}><i aria-hidden="true"><LearningIcon name={item === 'mixed' ? 'memory' : item} /></i><span><strong>{info.label}</strong><small>{info.description}</small></span>{item === 'mixed' && <em>추천</em>}</button>;
           })}
         </div>
       </fieldset>

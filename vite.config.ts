@@ -33,7 +33,20 @@ export default defineConfig(({ mode }) => {
         workbox: {
           cleanupOutdatedCaches: true,
           navigateFallback: `${base}index.html`,
-          globPatterns: ['**/*.{js,css,html,png,webmanifest}']
+          globPatterns: ['**/*.{js,css,html,webmanifest}', 'icons/*.png', 'illustrations/stories/covers/*.webp'],
+          additionalManifestEntries: [1, 2, 3].map((scene) => ({
+            url: `${base}illustrations/stories/sprout-rain-umbrella/scene-${scene}.webp`,
+            revision: null
+          })),
+          runtimeCaching: [{
+            urlPattern: /\/illustrations\//,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'learning-illustrations-v1',
+              cacheableResponse: { statuses: [0, 200] },
+              expiration: { maxEntries: 180, maxAgeSeconds: 60 * 60 * 24 * 90 }
+            }
+          }]
         }
       })
     ],

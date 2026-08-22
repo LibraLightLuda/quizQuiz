@@ -12,6 +12,8 @@ import {
 import type {
   Story, StoryActivity, StoryActivityState, StoryLevel, StoryProgress, StoryRecords, StoryResult
 } from './types';
+import { GuideCharacter } from '../visuals/GuideCharacter';
+import { storyCoverVisuals, storySceneVisuals } from '../visuals/visualAssets';
 import './story.css';
 
 type StoryScreen = 'home' | 'reading' | 'activity' | 'result' | 'library';
@@ -323,7 +325,7 @@ export default function StoryMode({
         {reviewing && <aside className="story-review-banner" role="status">🔎 {message}</aside>}
         <article className="story-scene-card">
           <span className="story-scene-number">{progress.pageIndex + 1}번째 장면</span>
-          <div className="story-illustration" role="img" aria-label={scene.alt}>{scene.illustration}</div>
+          <StoryScenePicture sceneId={scene.id} fallback={scene.illustration} alt={scene.alt} featured />
           <p>{scene.text}</p>
           {ttsEnabled && speechSupported() && (
             <button className={`story-listen-button ${speaking ? 'speaking' : ''}`} disabled={speaking} onClick={() => void readAloud(scene.text)}>
@@ -409,7 +411,7 @@ export default function StoryMode({
                     onDragStart={(event) => event.dataTransfer.setData('text/story-scene', sceneId)}
                     onDragOver={(event) => { if (!locked) event.preventDefault(); }}
                     onDrop={(event) => { event.preventDefault(); swapSequence(sceneId, event.dataTransfer.getData('text/story-scene')); }}>
-                    <b>{index + 1}</b><span aria-hidden="true">{scene.illustration}</span><em>{scene.text}</em>{locked && <small>자리 맞음 ✓</small>}
+                    <b>{index + 1}</b><StoryScenePicture sceneId={scene.id} fallback={scene.illustration} alt="" /><em>{scene.text}</em>{locked && <small>자리 맞음 ✓</small>}
                   </button>
                 );
               })}
@@ -471,7 +473,8 @@ export default function StoryMode({
         <section className="story-library-grid">
           {storiesByLevel(selectedLevel).map((story) => {
             const record = records.byStory[story.id];
-            return <button key={story.id} className={record ? 'completed' : ''} onClick={() => void startStory(story)}><span aria-hidden="true">{story.cover}</span><strong>{story.title}</strong><small>{record ? `★ ${record.bestStars} · ${record.completedCount}번 읽음` : '아직 만나지 않은 이야기'}</small></button>;
+            const cover = storyCoverVisuals[story.id];
+            return <button key={story.id} className={record ? 'completed' : ''} onClick={() => void startStory(story)}>{cover ? <img src={cover.src} alt="" loading="lazy" decoding="async" /> : <span aria-hidden="true">{story.cover}</span>}<strong>{story.title}</strong><small>{record ? `★ ${record.bestStars} · ${record.completedCount}번 읽음` : '아직 만나지 않은 이야기'}</small></button>;
           })}
         </section>
       </main>
@@ -486,7 +489,7 @@ export default function StoryMode({
       <StoryTopBar title="이야기 탐험대" onBack={onExit} />
       <section className="story-hero">
         <div><p className="eyebrow">읽고, 기억하고, 생각해요</p><h1>이야기 속으로<br />탐험을 떠나요!</h1><p>한 편에 약 3~5분이면 충분해요.</p></div>
-        <span aria-hidden="true">📖</span>
+        <GuideCharacter className="story-guide" decorative />
       </section>
       <aside className="story-howto" aria-label="이야기 탐험 방법">
         <span><b>1</b> 읽거나 듣기</span><i aria-hidden="true">›</i><span><b>2</b> 세 가지 활동</span><i aria-hidden="true">›</i><span><b>3</b> 별과 도감</span>
@@ -513,13 +516,20 @@ export default function StoryMode({
         <div>
           {storiesByLevel(selectedLevel).map((story) => {
             const completed = records.byStory[story.id];
-            return <button key={story.id} onClick={() => void startStory(story)}><span aria-hidden="true">{story.cover}</span><div><strong>{story.title}</strong><small>{story.summary}</small></div>{completed && <em aria-label={`최고 별 ${completed.bestStars}개`}>★ {completed.bestStars}</em>}</button>;
+            const cover = storyCoverVisuals[story.id];
+            return <button key={story.id} onClick={() => void startStory(story)}>{cover ? <img src={cover.src} alt="" loading="lazy" decoding="async" /> : <span aria-hidden="true">{story.cover}</span>}<div><strong>{story.title}</strong><small>{story.summary}</small></div>{completed && <em aria-label={`최고 별 ${completed.bestStars}개`}>★ {completed.bestStars}</em>}</button>;
           })}
         </div>
       </section>
       {storageWarning && <p className="story-storage-warning" role="status">기록을 저장하지 못했지만 이야기는 계속 읽을 수 있어요.</p>}
     </main>
   );
+}
+
+function StoryScenePicture({ sceneId, fallback, alt, featured = false }: { sceneId: string; fallback: string; alt: string; featured?: boolean }) {
+  const visual = storySceneVisuals[sceneId];
+  if (!visual) return <span className={featured ? 'story-illustration story-illustration-fallback' : 'story-sequence-thumb story-sequence-fallback'} role={alt ? 'img' : undefined} aria-label={alt || undefined} aria-hidden={alt ? undefined : true}>{fallback}</span>;
+  return <img className={featured ? 'story-illustration story-illustration-image' : 'story-sequence-thumb'} src={visual.src} alt={alt ? visual.alt : ''} loading={featured ? 'eager' : 'lazy'} decoding="async" />;
 }
 
 function StoryTopBar({ title, onBack }: { title: string; onBack: () => void }) {

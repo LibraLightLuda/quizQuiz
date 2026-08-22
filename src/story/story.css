@@ -16,6 +16,7 @@
 .story-hero h1 { margin: 0; font-size: clamp(31px, 7vw, 46px); line-height: 1.14; letter-spacing: -.045em; }
 .story-hero p:last-child { margin: 12px 0 0; color: #557264; font-weight: 700; }
 .story-hero > span { flex: 0 0 128px; height: 128px; display: grid; place-items: center; border-radius: 38px; background: rgba(255,255,255,.82); font-size: 72px; transform: rotate(4deg); box-shadow: 0 14px 30px rgba(35, 110, 76, .12); }
+.story-guide { flex: 0 0 148px; width: 148px; height: 148px; margin: -5px -9px -20px 0; object-fit: contain; filter: drop-shadow(0 12px 16px rgba(35, 110, 76, .14)); }
 .story-howto { margin-top: 12px; padding: 12px 14px; display: flex; align-items: center; justify-content: center; gap: 9px; border: 1px solid #dfe9e2; border-radius: 17px; background: rgba(255,255,255,.78); color: #4f6658; font-size: 14px; font-weight: 800; }
 .story-howto span { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
 .story-howto b { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 8px; background: #e4f4eb; color: #25724f; font-size: 12px; }
@@ -47,6 +48,7 @@
 .story-picks > div:last-child { display: grid; gap: 10px; }
 .story-picks > div:last-child > button { min-height: 82px; padding: 12px 15px; display: grid; grid-template-columns: 54px 1fr auto; align-items: center; gap: 12px; border: 1px solid #e3e0ed; border-radius: 20px; background: rgba(255,255,255,.92); color: var(--ink); text-align: left; cursor: pointer; }
 .story-picks > div:last-child > button > span { width: 54px; height: 54px; display: grid; place-items: center; border-radius: 17px; background: #eef8f2; font-size: 29px; }
+.story-picks > div:last-child > button > img { width: 58px; height: 58px; object-fit: cover; border: 2px solid #dcebe2; border-radius: 18px; }
 .story-picks button div { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .story-picks button strong { font-size: 18px; }
 .story-picks button small { color: var(--muted); line-height: 1.35; }
@@ -60,6 +62,8 @@
 .story-scene-card { min-height: 520px; padding: 22px 26px 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px solid #dceade; border-radius: 31px; background: linear-gradient(180deg, #ffffff, #f2fbf6); box-shadow: var(--shadow); text-align: center; }
 .story-scene-number { align-self: flex-start; padding: 6px 10px; border-radius: 10px; background: #edf7f1; color: #277552; font-size: 13px; font-weight: 850; }
 .story-illustration { width: min(220px, 62vw); height: min(220px, 62vw); margin: 14px auto 8px; display: grid; place-items: center; border: 2px solid #e1eee5; border-radius: 42%; background: radial-gradient(circle, #fffde7, #eaf8f0); font-size: clamp(90px, 28vw, 138px); filter: drop-shadow(0 12px 16px rgba(43, 85, 62, .1)); }
+.story-illustration-image { width: min(330px, 78vw); height: min(330px, 78vw); border-radius: 28px; object-fit: cover; background: #eef7f2; }
+.story-illustration-fallback { font-style: normal; }
 .story-scene-card > p { max-width: 27ch; margin: 12px auto 18px; font-size: clamp(22px, 5.4vw, 29px); font-weight: 800; line-height: 1.55; letter-spacing: -.02em; word-break: keep-all; }
 .story-listen-button { min-height: 54px; padding: 10px 17px; display: flex; align-items: center; gap: 8px; border: 2px solid #c9e6d6; border-radius: 17px; background: white; color: #216d4b; font-weight: 850; cursor: pointer; }
 .story-listen-button.speaking { animation: storyPulse .8s ease-in-out infinite alternate; }
@@ -100,6 +104,8 @@
 .story-sequence-list > button.locked { border-color: #67bd90; background: #ebf9f1; cursor: default; }
 .story-sequence-list button > b { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 10px; background: #eeebf7; color: #5e5875; }
 .story-sequence-list button > span { font-size: 28px; text-align: center; }
+.story-sequence-thumb { width: 42px; height: 42px; object-fit: cover; border-radius: 11px; background: #eef7f2; }
+.story-sequence-fallback { display: grid; place-items: center; }
 .story-sequence-list button > em { min-width: 0; font-size: 15px; font-style: normal; font-weight: 750; line-height: 1.4; word-break: keep-all; }
 .story-sequence-list button > small { color: #18724c; font-weight: 900; white-space: nowrap; }
 .story-check-button { width: 100%; min-height: 58px; margin-top: 11px; }
@@ -144,6 +150,8 @@
 .story-library-grid > button.completed { border-style: solid; border-color: #a9d8bd; background: #f0faf4; }
 .story-library-grid span { font-size: 42px; filter: grayscale(1); opacity: .42; }
 .story-library-grid .completed span { filter: none; opacity: 1; }
+.story-library-grid img { width: 76px; height: 76px; object-fit: cover; border: 3px solid #d9e8df; border-radius: 24px; filter: grayscale(.8); opacity: .58; }
+.story-library-grid .completed img { filter: none; opacity: 1; }
 .story-library-grid strong { font-size: 16px; }
 .story-library-grid small { color: var(--muted); font-size: 12px; line-height: 1.35; }
 
@@ -163,6 +171,7 @@
   .story-hero { min-height: 170px; padding: 20px 17px; border-radius: 25px; }
   .story-hero h1 { font-size: 29px; }
   .story-hero > span { flex-basis: 82px; height: 82px; border-radius: 26px; font-size: 49px; }
+  .story-guide { flex-basis: 104px; width: 104px; height: 104px; margin-right: -12px; }
   .story-hero p:last-child { font-size: 14px; }
   .story-level-grid { grid-template-columns: 1fr; }
   .story-level-grid > button { min-height: 82px; }
@@ -183,6 +192,7 @@
   .story-hero .eyebrow { font-size: 13px; }
   .story-hero h1 { font-size: 23px; }
   .story-hero > span { flex-basis: 56px; height: 56px; border-radius: 19px; font-size: 35px; }
+  .story-guide { flex-basis: 78px; width: 78px; height: 78px; }
   .story-resume-card, .story-daily-card { grid-template-columns: 44px 1fr 16px; padding: 12px; gap: 9px; }
   .story-resume-card > span:first-child, .story-daily-card > span:first-child { width: 44px; height: 44px; }
   .story-howto { display: grid; grid-template-columns: 1fr; justify-items: start; gap: 5px; }

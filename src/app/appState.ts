@@ -2,6 +2,15 @@ import type { AnswerRecord, Question, QuestionStatus, SessionConfig, SessionSumm
 
 export type Screen = 'home' | 'mode' | 'setup' | 'session' | 'result' | 'settings';
 
+export interface ReviewItem {
+  questionId: string;
+  prompt: string;
+  selectedAnswer: string | null;
+  correctAnswer: string;
+  explanation: string;
+  resolution: 'incorrect' | 'timeout';
+}
+
 export interface ActiveSession {
   id: string;
   config: SessionConfig;
@@ -9,6 +18,7 @@ export interface ActiveSession {
   currentQuestion: Question;
   questionStatus: QuestionStatus;
   answers: AnswerRecord[];
+  reviewItems: ReviewItem[];
   recentSignatures: string[];
   recentAnswers: number[];
   recentCorrectIndices: number[];
@@ -32,4 +42,5 @@ export interface AppState {
   draftConfig: SessionConfig;
   session: ActiveSession | null;
   latestResult: SessionSummary | null;
+  latestReview: ReviewItem[];
 }
