@@ -33,7 +33,7 @@ export default defineConfig(({ mode }) => {
         workbox: {
           cleanupOutdatedCaches: true,
           navigateFallback: `${base}index.html`,
-          globPatterns: ['**/*.{js,css,html,webmanifest}', 'icons/*.png', 'illustrations/stories/covers/*.webp'],
+          globPatterns: ['**/*.{js,css,html,webmanifest}', 'icons/*.png', 'illustrations/characters/*.webp', 'illustrations/ui/*.webp', 'illustrations/stories/covers/*.webp'],
           additionalManifestEntries: [1, 2, 3].map((scene) => ({
             url: `${base}illustrations/stories/sprout-rain-umbrella/scene-${scene}.webp`,
             revision: null

@@ -10,7 +10,7 @@ test('통합 첫걸음을 완주하고 의미 쌍 기록과 별을 저장한다'
   await expect(page.getByRole('radio', { name: /통합 학습/ })).toHaveAttribute('aria-checked', 'true');
   await page.getByRole('button', { name: /카드 8장 시작/ }).click();
   await expect(page.getByLabel('기억력 카드 판')).toBeVisible();
-  await expect(page.locator('.memory-card-back svg')).toHaveCount(8);
+  await expect(page.locator('.memory-card-back img')).toHaveCount(8);
   expect(await page.locator('.memory-card-back i').allTextContents()).not.toContain('?');
 
   const cards = await page.evaluate(() => JSON.parse(localStorage.getItem('numbercal.memory.progress.v1') ?? 'null').cards);

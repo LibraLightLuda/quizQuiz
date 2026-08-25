@@ -63,13 +63,14 @@ export function SudokuToolIcon({ kind }: { kind: SudokuToolKind }) {
 export function SudokuCompleteVisual() {
   return (
     <div className="sudoku-complete-visual" aria-hidden="true">
-      <svg viewBox="0 0 112 112" focusable="false">
-        <rect x="17" y="17" width="78" height="78" rx="15" />
-        {[43, 69].map((position) => <path key={`v-${position}`} d={`M${position} 20V92`} />)}
-        {[43, 69].map((position) => <path key={`h-${position}`} d={`M20 ${position}H92`} />)}
-        <path className="complete-check" d="m35 57 15 15 29-34" />
-        <path className="complete-spark" d="M92 12v10M87 17h10M17 87v8M13 91h8" />
-      </svg>
+      <img
+        src={`${import.meta.env.BASE_URL}illustrations/ui/sudoku-complete.webp`}
+        alt=""
+        width="512"
+        height="512"
+        decoding="async"
+        draggable={false}
+      />
     </div>
   );
 }

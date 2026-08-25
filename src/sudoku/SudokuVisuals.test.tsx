@@ -15,12 +15,12 @@ describe('Sudoku visual guides', () => {
     expect(markup).toContain(`rule-${focus}`);
   });
 
-  it('게임 도구와 완료 표시를 가벼운 자체 SVG로 제공한다', () => {
+  it('게임 도구와 고품질 완료 표시를 제공한다', () => {
     for (const kind of ['erase', 'hint', 'refresh'] as const) {
       expect(renderToStaticMarkup(<SudokuToolIcon kind={kind} />)).toContain('sudoku-tool-icon');
     }
     const complete = renderToStaticMarkup(<SudokuCompleteVisual />);
     expect(complete).toContain('sudoku-complete-visual');
-    expect(complete).toContain('complete-check');
+    expect(complete).toContain('sudoku-complete.webp');
   });
 });
