@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_SETTINGS, loadHistory, loadSettings, saveSession, saveSettings } from './storageService';
+import { clearAllLearningRecords, DEFAULT_SETTINGS, loadHistory, loadSettings, saveSession, saveSettings } from './storageService';
 import type { SessionSummary } from '../domain/types';
 
 describe('로컬 저장', () => {
@@ -59,5 +59,20 @@ describe('로컬 저장', () => {
     const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('blocked'); });
     expect(saveSettings(DEFAULT_SETTINGS)).toBe(false);
     spy.mockRestore();
+  });
+
+  it('설정과 진행 중인 놀이를 남기고 모든 완료 기록만 지운다', () => {
+    localStorage.setItem('numbercal.history.v1', '{}');
+    localStorage.setItem('numbercal.sudoku.records.v1', '{}');
+    localStorage.setItem('numbercal.memory.records.v1', '{}');
+    localStorage.setItem('numbercal.story.records.v1', '{}');
+    localStorage.setItem('numbercal.balance.records.v1', '{}');
+    localStorage.setItem('numbercal.balance.progress.v1', '{"playing":true}');
+    localStorage.setItem('numbercal.settings.v1', JSON.stringify(DEFAULT_SETTINGS));
+    expect(clearAllLearningRecords()).toBe(true);
+    expect(localStorage.getItem('numbercal.history.v1')).toBeNull();
+    expect(localStorage.getItem('numbercal.balance.records.v1')).toBeNull();
+    expect(localStorage.getItem('numbercal.balance.progress.v1')).not.toBeNull();
+    expect(localStorage.getItem('numbercal.settings.v1')).not.toBeNull();
   });
 });

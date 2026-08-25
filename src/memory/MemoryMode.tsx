@@ -14,6 +14,7 @@ import type { MemoryDifficulty, MemoryMode as MemoryModeType, MemoryProgress, Me
 import { GuideCharacter } from '../visuals/GuideCharacter';
 import { LearningIcon } from '../visuals/LearningIcon';
 import { MemoryCardVisual } from '../visuals/MemoryCardVisual';
+import { AchievementGrid } from '../visuals/AchievementGrid';
 import { getMemoryAchievementStatuses, getNewMemoryAchievementIds, memoryRecordSummary } from './memoryAchievements';
 import './memory.css';
 
@@ -312,16 +313,7 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled }: MemoryModeProps
           <div><strong>{summary.dailyCount}</strong><small>일일 배지</small></div>
         </section>
         <div className="memory-collection-progress" aria-label={`배지 ${achievements.length}개 중 ${unlockedCount}개 획득`}><span style={{ width: `${(unlockedCount / achievements.length) * 100}%` }} /></div>
-        <section className="memory-badge-grid" aria-label="기억력 배지 목록">
-          {achievements.map((achievement) => (
-            <article key={achievement.id} className={achievement.unlocked ? 'is-unlocked' : 'is-locked'}>
-              <i aria-hidden="true">{achievement.unlocked ? achievement.icon : '🔒'}</i>
-              <strong>{achievement.title}</strong>
-              <p>{achievement.description}</p>
-              <small>{achievement.unlocked ? '배지 획득!' : `${achievement.progress} / ${achievement.target}`}</small>
-            </article>
-          ))}
-        </section>
+        <AchievementGrid items={achievements} className="memory-badge-grid" label="기억력 배지 목록" />
         <button className="primary-button memory-collection-back" onClick={() => setScreen('levels')}>다음 도전 고르기</button>
       </main>
     );

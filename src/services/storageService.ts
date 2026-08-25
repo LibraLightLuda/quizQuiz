@@ -3,6 +3,12 @@ import type { Settings, StoredHistory, SessionSummary, SessionConfig, Mode, Subj
 
 const SETTINGS_KEY = 'numbercal.settings.v1';
 const HISTORY_KEY = 'numbercal.history.v1';
+const GAME_RECORD_KEYS = [
+  'numbercal.sudoku.records.v1',
+  'numbercal.memory.records.v1',
+  'numbercal.story.records.v1',
+  'numbercal.balance.records.v1'
+] as const;
 
 export const DEFAULT_SETTINGS: Settings = {
   schemaVersion: 1,
@@ -107,6 +113,16 @@ export const saveSession = (
 export const clearHistory = (): boolean => {
   try {
     localStorage.removeItem(HISTORY_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+export const clearAllLearningRecords = (): boolean => {
+  try {
+    localStorage.removeItem(HISTORY_KEY);
+    for (const key of GAME_RECORD_KEYS) localStorage.removeItem(key);
     return true;
   } catch {
     return false;

@@ -189,9 +189,9 @@ test('모바일 홈은 오늘의 추천과 어린이용 학습 타일을 먼저 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: /어린이 학습 놀이터/ })).toBeVisible();
-  await expect(page.getByRole('button', { name: '오늘의 추천 이야기 탐험대 시작하기' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /오늘의 추천 (이야기 탐험대|균형 저울) 시작하기/ })).toBeVisible();
   await expect(page.locator('.home-guide')).toBeVisible();
-  await expect(page.locator('.subject-grid .subject-card')).toHaveCount(6);
+  await expect(page.locator('.subject-grid .subject-card')).toHaveCount(7);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });
 
@@ -291,8 +291,10 @@ test('PC 홈 화면의 학습 카드가 같은 크기로 3열 정렬된다', asy
   expect(Math.max(...cards.map((card) => card.height)) - Math.min(...cards.map((card) => card.height))).toBeLessThan(1);
 
   const rows = [...new Set(cards.map((card) => Math.round(card.top)))];
-  expect(rows).toHaveLength(2);
+  expect(rows).toHaveLength(3);
   expect(cards.filter((card) => Math.round(card.top) === rows[0])).toHaveLength(3);
+  expect(cards.filter((card) => Math.round(card.top) === rows[1])).toHaveLength(3);
+  expect(cards.filter((card) => Math.round(card.top) === rows[2])).toHaveLength(1);
   expect(cards.every((card) => card.left >= 0 && card.left + card.width <= 1280)).toBe(true);
 });
 

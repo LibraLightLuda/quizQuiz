@@ -8,18 +8,20 @@ import { listeningFallbackMode } from '../domain/languageGenerator';
 import { CryptoRandom, shuffle } from '../services/randomService';
 import { cancelSpeech, speak, speechSupported } from '../services/speechService';
 import { playSuccessSound, unlockAudio } from '../services/soundService';
-import { clearHistory, loadHistory, loadSettings, saveSession, saveSettings } from '../services/storageService';
+import { clearAllLearningRecords, loadHistory, loadSettings, saveSession, saveSettings } from '../services/storageService';
 import { GuideCharacter } from '../visuals/GuideCharacter';
 import { LearningIcon } from '../visuals/LearningIcon';
 import { hasMathVisual, MathVisual } from '../visuals/MathVisual';
 import { ConceptPicture } from '../visuals/ConceptPicture';
 import { questionConceptIds } from '../visuals/visualAssets';
+import { BalanceIcon } from '../visuals/BalanceIcon';
 import '../styles/global.css';
 
 const random = new CryptoRandom();
 const SudokuMode = lazy(() => import('../sudoku/SudokuMode'));
 const MemoryMode = lazy(() => import('../memory/MemoryMode'));
 const StoryMode = lazy(() => import('../story/StoryMode'));
+const BalanceMode = lazy(() => import('../balance/BalanceMode'));
 const praiseMessages = ['잘했어요!', '정답이에요!', '대단해요!', '멋져요!', '최고예요!', '한 문제 더!'];
 const gentleMessages = ['괜찮아요!', '다음 문제도 해봐요!', '조금만 더 생각해봐요!', '차근차근 잘하고 있어요!'];
 const makeMessagePicker = (values: readonly string[]) => {
@@ -42,6 +44,30 @@ const feedbackDelay = (correct: boolean): number => correct ? 500 : 650;
 
 const subjectForMode = (mode: Mode): Subject => modeInfo[mode].subject;
 
+const localDateKey = (date = new Date()): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const dailyCompleted = (storageKey: string, dateKey: string): boolean => {
+  try {
+    const value = JSON.parse(localStorage.getItem(storageKey) ?? 'null') as { dailyBadges?: unknown } | null;
+    return Array.isArray(value?.dailyBadges) && value.dailyBadges.includes(dateKey);
+  } catch {
+    return false;
+  }
+};
+
+const recommendedDailyMode = (): 'story' | 'balance' => {
+  const dateKey = localDateKey();
+  const storyDone = dailyCompleted('numbercal.story.records.v1', dateKey);
+  const balanceDone = dailyCompleted('numbercal.balance.records.v1', dateKey);
+  if (storyDone !== balanceDone) return storyDone ? 'balance' : 'story';
+  return Number(dateKey.slice(-2)) % 2 === 0 ? 'balance' : 'story';
+};
+
 const GameLoading = () => (
   <main className="screen game-loading" aria-busy="true" aria-live="polite">
     <span aria-hidden="true">✦</span>
@@ -55,6 +81,7 @@ function App() {
   const [sudokuOpen, setSudokuOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [storyOpen, setStoryOpen] = useState(false);
+  const [balanceOpen, setBalanceOpen] = useState(false);
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [timerAnnouncement, setTimerAnnouncement] = useState('');
   const [showExit, setShowExit] = useState(false);
@@ -341,6 +368,7 @@ function App() {
 
   const canListen = state.settings.tts && speechSupported();
   const activeAnimations = state.settings.animations && !reducedMotion;
+  const dailyRecommendation = recommendedDailyMode();
 
   if (storyOpen) {
     return (
@@ -385,6 +413,20 @@ function App() {
     );
   }
 
+  if (balanceOpen) {
+    return (
+      <div className={`app-shell ${activeAnimations ? '' : 'reduce-motion'}`}>
+        <Suspense fallback={<GameLoading />}>
+          <BalanceMode
+            onExit={() => setBalanceOpen(false)}
+            soundEnabled={state.settings.sound}
+            animationsEnabled={activeAnimations}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
   return (
     <div className={`app-shell ${activeAnimations ? '' : 'reduce-motion'}`}>
       {state.screen === 'home' && (
@@ -399,12 +441,20 @@ function App() {
             <GuideCharacter className="home-guide" decorative />
           </header>
           <section className="home-recommendation" aria-labelledby="today-recommendation-title">
-            <div><p className="eyebrow">오늘의 추천</p><h2 id="today-recommendation-title">짧은 이야기 한 편 어때요?</h2></div>
-            <button onClick={() => setStoryOpen(true)} aria-label="오늘의 추천 이야기 탐험대 시작하기">
-              <span className="recommendation-icon"><LearningIcon name="story" /></span>
-              <span><strong>이야기 탐험대</strong><small>읽고 듣고, 세 가지 활동을 해요</small></span>
-              <b aria-hidden="true">시작 ›</b>
-            </button>
+            <div><p className="eyebrow">오늘의 추천</p><h2 id="today-recommendation-title">{dailyRecommendation === 'story' ? '짧은 이야기 한 편 어때요?' : '오늘의 저울을 맞춰 볼까요?'}</h2></div>
+            {dailyRecommendation === 'story' ? (
+              <button onClick={() => setStoryOpen(true)} aria-label="오늘의 추천 이야기 탐험대 시작하기">
+                <span className="recommendation-icon"><LearningIcon name="story" /></span>
+                <span><strong>이야기 탐험대</strong><small>읽고 듣고, 세 가지 활동을 해요</small></span>
+                <b aria-hidden="true">시작 ›</b>
+              </button>
+            ) : (
+              <button onClick={() => setBalanceOpen(true)} aria-label="오늘의 추천 균형 저울 시작하기">
+                <span className="recommendation-icon balance-recommendation-icon"><BalanceIcon decorative /></span>
+                <span><strong>균형 저울</strong><small>숫자 추를 놓아 양쪽 합을 맞춰요</small></span>
+                <b aria-hidden="true">시작 ›</b>
+              </button>
+            )}
           </section>
           <section className="home-learning-section" aria-labelledby="learning-list-title">
             <div className="home-section-title"><p className="eyebrow">모든 학습</p><h2 id="learning-list-title">하고 싶은 놀이를 골라요</h2></div>
@@ -432,6 +482,11 @@ function App() {
             <button className="subject-card sudoku" onClick={() => setSudokuOpen(true)}>
               <span className="subject-icon" aria-hidden="true"><LearningIcon name="sudoku" /></span>
               <span className="subject-copy"><strong>스도쿠</strong><small>숫자 규칙을 찾아요</small></span>
+              <span className="arrow" aria-hidden="true">›</span>
+            </button>
+            <button className="subject-card balance" onClick={() => setBalanceOpen(true)}>
+              <span className="subject-icon" aria-hidden="true"><BalanceIcon /></span>
+              <span className="subject-copy"><strong>균형 저울</strong><small>숫자 추로 양쪽을 맞춰요</small></span>
               <span className="arrow" aria-hidden="true">›</span>
             </button>
             </div>
@@ -615,8 +670,8 @@ function App() {
           {reducedMotion && <p className="settings-note">기기의 동작 줄이기 설정을 따르고 있어요.</p>}
           {storageWarning && <p className="settings-note warning">이 기기에는 설정이나 기록을 저장하지 못할 수 있어요.</p>}
           <section className="settings-panel danger-zone">
-            <div><strong>최근 학습 기록</strong><small>{state.history.length}개가 저장되어 있어요</small></div>
-            <button className="small-button" onClick={() => { if (window.confirm('최근 학습 기록을 모두 지울까요?')) { if (!clearHistory()) setStorageWarning(true); dispatch({ type: 'CLEAR_HISTORY' }); } }}>기록 지우기</button>
+            <div><strong>학습·게임 기록</strong><small>최근 학습과 게임의 완료 기록을 지워요</small></div>
+            <button className="small-button" onClick={() => { if (window.confirm('최근 학습과 모든 게임의 완료 기록을 지울까요? 진행 중인 놀이는 유지돼요.')) { if (!clearAllLearningRecords()) setStorageWarning(true); dispatch({ type: 'CLEAR_HISTORY' }); } }}>기록 지우기</button>
           </section>
           <p className="privacy-note">이름이나 개인정보는 모으지 않아요. 기록은 이 기기에만 저장돼요.</p>
         </main>
