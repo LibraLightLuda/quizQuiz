@@ -39,6 +39,7 @@ test('하위 경로 PWA가 올바른 scope로 설치되고 오프라인 학습�
   await page.getByRole('button', { name: /시작할래요/ }).click();
   for (let index = 0; index < 15; index += 1) {
     await page.locator('.option-button:not([disabled])').first().click();
+    await page.getByRole('button', { name: index === 14 ? '결과 보기' : '다음 문제' }).click();
     if (index < 14) await expect(page.getByText(`${index + 2} / 15`)).toBeVisible({ timeout: 3000 });
   }
   await expect(page.locator('.result-screen')).toBeVisible({ timeout: 3000 });

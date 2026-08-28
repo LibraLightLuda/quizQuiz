@@ -13,6 +13,7 @@ const start = async (page: Page, subject: RegExp, mode: RegExp, difficulty?: Reg
 const finishWithFirstChoices = async (page: Page, startIndex = 0) => {
   for (let index = startIndex; index < SESSION_LENGTH; index += 1) {
     await page.locator('.option-button:not([disabled])').first().click();
+    await page.getByRole('button', { name: index === SESSION_LENGTH - 1 ? '결과 보기' : '다음 문제' }).click();
     if (index < SESSION_LENGTH - 1) {
       await expect(page.getByText(`${index + 2} / ${SESSION_LENGTH}`)).toBeVisible({ timeout: 3000 });
     }
@@ -86,6 +87,7 @@ test('수학 쉬움 15문제를 풀고 결과의 오답 복습과 저장 기록�
     } else {
       await page.getByRole('button', { name: String(answer), exact: true }).click();
     }
+    await page.getByRole('button', { name: index === SESSION_LENGTH - 1 ? '결과 보기' : '다음 문제' }).click();
     if (index < SESSION_LENGTH - 1) {
       await expect(page.getByText(`${index + 2} / ${SESSION_LENGTH}`)).toBeVisible({ timeout: 3000 });
     }
@@ -159,7 +161,24 @@ test('서로 다른 보기를 연속 클릭해도 한 문제만 처리한다', a
   await start(page, /수학 더하고/, /^덧셈 /);
   await page.locator('.option-button:not([disabled])').first().waitFor();
   await page.locator('.option-button').evaluateAll((buttons) => buttons.forEach((button) => (button as HTMLButtonElement).click()));
+  await expect(page.locator('.feedback-panel')).toBeVisible();
+  await page.getByRole('button', { name: '다음 문제' }).click();
   await expect(page.getByText('2 / 15')).toBeVisible({ timeout: 3000 });
+});
+
+test('정답 공개는 5초 동안 유지되고 다음 문제 버튼으로 바로 넘길 수 있다', async ({ page }) => {
+  await start(page, /수학 더하고/, /^덧셈 /);
+  await page.locator('.option-button:not([disabled])').first().click();
+  await expect(page.locator('.feedback-panel')).toBeVisible();
+  await expect(page.getByText('1 / 15')).toBeVisible();
+  await expect(page.getByText('5초 뒤 자동으로 넘어가요.')).toBeVisible();
+
+  await page.waitForTimeout(4200);
+  await expect(page.locator('.feedback-panel')).toBeVisible();
+  await expect(page.getByText('1 / 15')).toBeVisible();
+
+  await page.getByRole('button', { name: '다음 문제' }).click();
+  await expect(page.getByText('2 / 15')).toBeVisible({ timeout: 1000 });
 });
 
 test('설정 유지, 새로고침 복구, 동작 줄이기가 안전하게 동작한다', async ({ page }) => {

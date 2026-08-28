@@ -42,7 +42,7 @@ const makeMessagePicker = (values: readonly string[]) => {
 const pickPraise = makeMessagePicker(praiseMessages);
 const pickGentle = makeMessagePicker(gentleMessages);
 
-const feedbackDelay = (correct: boolean): number => correct ? 500 : 650;
+export const FEEDBACK_REVIEW_MS = 5000;
 
 const subjectForMode = (mode: Mode): Subject => modeInfo[mode].subject;
 
@@ -219,6 +219,43 @@ function App() {
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, [cancelActiveSpeech, state.session?.paused]);
 
+  const advanceFromFeedback = useCallback(() => {
+    const session = state.session;
+    if (!session || session.questionStatus !== 'feedback' || session.paused) return;
+    const questionId = session.currentQuestion.id;
+    if (advancedQuestions.current.has(questionId)) return;
+    advancedQuestions.current.add(questionId);
+    const isLast = session.answers.length >= SESSION_LENGTH;
+    if (isLast) {
+      const correctCount = session.answers.filter((answer) => answer.resolution === 'correct').length;
+      const incorrectCount = session.answers.filter((answer) => answer.resolution === 'incorrect').length;
+      const timeoutCount = session.answers.filter((answer) => answer.resolution === 'timeout').length;
+      const averageResponseMs = Math.round(session.answers.reduce((sum, answer) => sum + answer.responseMs, 0) / session.answers.length);
+      const summary: SessionSummary = {
+        id: session.id, completedAt: new Date().toISOString(), config: session.config,
+        correctCount, incorrectCount, timeoutCount, totalCount: session.answers.length, averageResponseMs
+      };
+      const saved = saveSession(summary, state.history);
+      if (!saved.saved) setStorageWarning(true);
+      dispatch({ type: 'RESTORE_HISTORY', history: saved.history });
+      dispatch({ type: 'ADVANCE', questionId, nextQuestion: null, summary });
+      return;
+    }
+    try {
+      const currentCorrectIndex = session.currentQuestion.options.findIndex(
+        (option) => option.id === session.currentQuestion.correctOptionId
+      );
+      const recentCorrectIndices = [...session.recentCorrectIndices, currentCorrectIndex].slice(-2);
+      const nextQuestion = generateQuestion(
+        session.config, session.recentSignatures, session.recentAnswers, random, recentCorrectIndices
+      );
+      dispatch({ type: 'ADVANCE', questionId, nextQuestion });
+    } catch {
+      setGenerationError('이 단계의 문제를 준비하지 못했어요. 다른 단계를 골라 주세요.');
+      dispatch({ type: 'SESSION_ERROR' });
+    }
+  }, [state.history, state.session]);
+
   useEffect(() => {
     const session = state.session;
     if (!session || session.questionStatus !== 'feedback' || session.paused || showExit || showResume) return;
@@ -227,41 +264,9 @@ function App() {
       feedbackEffects.current.add(questionId);
       if (session.resolution === 'correct' && state.settings.sound) playSuccessSound();
     }
-    const timer = window.setTimeout(() => {
-      if (advancedQuestions.current.has(questionId)) return;
-      advancedQuestions.current.add(questionId);
-      const isLast = session.answers.length >= SESSION_LENGTH;
-      if (isLast) {
-        const correctCount = session.answers.filter((answer) => answer.resolution === 'correct').length;
-        const incorrectCount = session.answers.filter((answer) => answer.resolution === 'incorrect').length;
-        const timeoutCount = session.answers.filter((answer) => answer.resolution === 'timeout').length;
-        const averageResponseMs = Math.round(session.answers.reduce((sum, answer) => sum + answer.responseMs, 0) / session.answers.length);
-        const summary: SessionSummary = {
-          id: session.id, completedAt: new Date().toISOString(), config: session.config,
-          correctCount, incorrectCount, timeoutCount, totalCount: session.answers.length, averageResponseMs
-        };
-        const saved = saveSession(summary, state.history);
-        if (!saved.saved) setStorageWarning(true);
-        dispatch({ type: 'RESTORE_HISTORY', history: saved.history });
-        dispatch({ type: 'ADVANCE', questionId, nextQuestion: null, summary });
-        return;
-      }
-      try {
-        const currentCorrectIndex = session.currentQuestion.options.findIndex(
-          (option) => option.id === session.currentQuestion.correctOptionId
-        );
-        const recentCorrectIndices = [...session.recentCorrectIndices, currentCorrectIndex].slice(-2);
-        const nextQuestion = generateQuestion(
-          session.config, session.recentSignatures, session.recentAnswers, random, recentCorrectIndices
-        );
-        dispatch({ type: 'ADVANCE', questionId, nextQuestion });
-      } catch {
-        setGenerationError('이 단계의 문제를 준비하지 못했어요. 다른 단계를 골라 주세요.');
-        dispatch({ type: 'SESSION_ERROR' });
-      }
-    }, feedbackDelay(session.resolution === 'correct'));
+    const timer = window.setTimeout(advanceFromFeedback, FEEDBACK_REVIEW_MS);
     return () => window.clearTimeout(timer);
-  }, [showExit, showResume, state.history, state.session, state.settings.sound]);
+  }, [advanceFromFeedback, showExit, showResume, state.session, state.settings.sound]);
 
   useEffect(() => () => {
     speechRequestToken.current += 1;
@@ -636,12 +641,18 @@ function App() {
             </div>
           )}
           {state.session.questionStatus === 'feedback' && (
-            <Feedback
-              resolution={state.session.resolution!}
-              text={state.session.feedbackText}
-              explanation={state.session.currentQuestion.explanation}
-              celebrate={activeAnimations && state.session.questionIndex % 3 === 0}
-            />
+            <div className="feedback-review">
+              <Feedback
+                resolution={state.session.resolution!}
+                text={state.session.feedbackText}
+                explanation={state.session.currentQuestion.explanation}
+                celebrate={activeAnimations && state.session.questionIndex % 3 === 0}
+              />
+              <small className="feedback-wait-note">5초 뒤 자동으로 넘어가요.</small>
+              <button className="primary-button feedback-next" onClick={advanceFromFeedback}>
+                {state.session.answers.length >= SESSION_LENGTH ? '결과 보기' : '다음 문제'}
+              </button>
+            </div>
           )}
           <div className="sr-only" aria-live="polite">{state.session.questionStatus === 'feedback' ? `${state.session.feedbackText} 정답은 ${state.session.currentQuestion.explanation}` : ''}</div>
           <div className="sr-only" aria-live="polite">{timerAnnouncement}</div>
