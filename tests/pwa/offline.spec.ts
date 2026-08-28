@@ -21,6 +21,12 @@ test('하위 경로 PWA가 올바른 scope로 설치되고 오프라인 학습�
   await context.setOffline(true);
   await page.reload();
   await expect(page.getByRole('heading', { name: '어린이 학습 놀이터' })).toBeVisible();
+  await page.getByRole('button', { name: '숫자 길 찾기 숫자를 이어 목표 합을 만들어요' }).click();
+  await expect(page.getByRole('heading', { name: '시작 칸에서 출발해요' })).toBeVisible();
+  await page.getByRole('button', { name: '뒤로 가기' }).click();
+  await expect.poll(() => page.locator('.number-path-hero-image').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth === 512)).toBe(true);
+  await page.goto('./');
+  await expect(page.getByRole('heading', { name: '어린이 학습 놀이터' })).toBeVisible();
   await page.getByRole('button', { name: /이야기 탐험대 읽고/ }).click();
   await expect(page.getByRole('heading', { name: /이야기 속으로/ })).toBeVisible();
   await page.locator('.story-picks').getByRole('button', { name: /비 오는 날의 우산/ }).click();

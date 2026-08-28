@@ -15,6 +15,7 @@ import { hasMathVisual, MathVisual } from '../visuals/MathVisual';
 import { ConceptPicture } from '../visuals/ConceptPicture';
 import { questionConceptIds } from '../visuals/visualAssets';
 import { BalanceIcon } from '../visuals/BalanceIcon';
+import { NumberPathIcon } from '../visuals/NumberPathIcon';
 import '../styles/global.css';
 
 const random = new CryptoRandom();
@@ -22,6 +23,7 @@ const SudokuMode = lazy(() => import('../sudoku/SudokuMode'));
 const MemoryMode = lazy(() => import('../memory/MemoryMode'));
 const StoryMode = lazy(() => import('../story/StoryMode'));
 const BalanceMode = lazy(() => import('../balance/BalanceMode'));
+const NumberPathMode = lazy(() => import('../number-path/NumberPathMode'));
 const praiseMessages = ['잘했어요!', '정답이에요!', '대단해요!', '멋져요!', '최고예요!', '한 문제 더!'];
 const gentleMessages = ['괜찮아요!', '다음 문제도 해봐요!', '조금만 더 생각해봐요!', '차근차근 잘하고 있어요!'];
 const makeMessagePicker = (values: readonly string[]) => {
@@ -60,12 +62,16 @@ const dailyCompleted = (storageKey: string, dateKey: string): boolean => {
   }
 };
 
-const recommendedDailyMode = (): 'story' | 'balance' => {
+const recommendedDailyMode = (): 'story' | 'balance' | 'number-path' => {
   const dateKey = localDateKey();
-  const storyDone = dailyCompleted('numbercal.story.records.v1', dateKey);
-  const balanceDone = dailyCompleted('numbercal.balance.records.v1', dateKey);
-  if (storyDone !== balanceDone) return storyDone ? 'balance' : 'story';
-  return Number(dateKey.slice(-2)) % 2 === 0 ? 'balance' : 'story';
+  const modes = [
+    { mode: 'story' as const, done: dailyCompleted('numbercal.story.records.v1', dateKey) },
+    { mode: 'balance' as const, done: dailyCompleted('numbercal.balance.records.v1', dateKey) },
+    { mode: 'number-path' as const, done: dailyCompleted('numbercal.number-path.records.v1', dateKey) }
+  ];
+  const incomplete = modes.filter((item) => !item.done);
+  const choices = incomplete.length ? incomplete : modes;
+  return choices[Number(dateKey.slice(-2)) % choices.length].mode;
 };
 
 const GameLoading = () => (
@@ -82,6 +88,7 @@ function App() {
   const [memoryOpen, setMemoryOpen] = useState(false);
   const [storyOpen, setStoryOpen] = useState(false);
   const [balanceOpen, setBalanceOpen] = useState(false);
+  const [numberPathOpen, setNumberPathOpen] = useState(false);
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [timerAnnouncement, setTimerAnnouncement] = useState('');
   const [showExit, setShowExit] = useState(false);
@@ -427,6 +434,19 @@ function App() {
     );
   }
 
+  if (numberPathOpen) {
+    return (
+      <div className={`app-shell ${activeAnimations ? '' : 'reduce-motion'}`}>
+        <Suspense fallback={<GameLoading />}>
+          <NumberPathMode
+            onExit={() => setNumberPathOpen(false)}
+            soundEnabled={state.settings.sound}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
   return (
     <div className={`app-shell ${activeAnimations ? '' : 'reduce-motion'}`}>
       {state.screen === 'home' && (
@@ -441,17 +461,23 @@ function App() {
             <GuideCharacter className="home-guide" decorative />
           </header>
           <section className="home-recommendation" aria-labelledby="today-recommendation-title">
-            <div><p className="eyebrow">오늘의 추천</p><h2 id="today-recommendation-title">{dailyRecommendation === 'story' ? '짧은 이야기 한 편 어때요?' : '오늘의 저울을 맞춰 볼까요?'}</h2></div>
+            <div><p className="eyebrow">오늘의 추천</p><h2 id="today-recommendation-title">{dailyRecommendation === 'story' ? '짧은 이야기 한 편 어때요?' : dailyRecommendation === 'balance' ? '오늘의 저울을 맞춰 볼까요?' : '오늘의 숫자 길을 찾아볼까요?'}</h2></div>
             {dailyRecommendation === 'story' ? (
               <button onClick={() => setStoryOpen(true)} aria-label="오늘의 추천 이야기 탐험대 시작하기">
                 <span className="recommendation-icon"><LearningIcon name="story" /></span>
                 <span><strong>이야기 탐험대</strong><small>읽고 듣고, 세 가지 활동을 해요</small></span>
                 <b aria-hidden="true">시작 ›</b>
               </button>
-            ) : (
+            ) : dailyRecommendation === 'balance' ? (
               <button onClick={() => setBalanceOpen(true)} aria-label="오늘의 추천 균형 저울 시작하기">
                 <span className="recommendation-icon balance-recommendation-icon"><BalanceIcon decorative /></span>
                 <span><strong>균형 저울</strong><small>숫자 추를 놓아 양쪽 합을 맞춰요</small></span>
+                <b aria-hidden="true">시작 ›</b>
+              </button>
+            ) : (
+              <button onClick={() => setNumberPathOpen(true)} aria-label="오늘의 추천 숫자 길 찾기 시작하기">
+                <span className="recommendation-icon number-path-recommendation-icon"><NumberPathIcon decorative /></span>
+                <span><strong>숫자 길 찾기</strong><small>상하좌우로 이어 목표 합을 만들어요</small></span>
                 <b aria-hidden="true">시작 ›</b>
               </button>
             )}
@@ -487,6 +513,11 @@ function App() {
             <button className="subject-card balance" onClick={() => setBalanceOpen(true)}>
               <span className="subject-icon" aria-hidden="true"><BalanceIcon /></span>
               <span className="subject-copy"><strong>균형 저울</strong><small>숫자 추로 양쪽을 맞춰요</small></span>
+              <span className="arrow" aria-hidden="true">›</span>
+            </button>
+            <button className="subject-card number-path" onClick={() => setNumberPathOpen(true)}>
+              <span className="subject-icon" aria-hidden="true"><NumberPathIcon decorative /></span>
+              <span className="subject-copy"><strong>숫자 길 찾기</strong><small>숫자를 이어 목표 합을 만들어요</small></span>
               <span className="arrow" aria-hidden="true">›</span>
             </button>
             </div>

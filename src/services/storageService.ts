@@ -7,7 +7,8 @@ const GAME_RECORD_KEYS = [
   'numbercal.sudoku.records.v1',
   'numbercal.memory.records.v1',
   'numbercal.story.records.v1',
-  'numbercal.balance.records.v1'
+  'numbercal.balance.records.v1',
+  'numbercal.number-path.records.v1'
 ] as const;
 
 export const DEFAULT_SETTINGS: Settings = {
