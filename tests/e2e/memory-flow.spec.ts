@@ -34,6 +34,9 @@ test('통합 첫걸음을 완주하고 의미 쌍 기록과 별을 저장한다'
   await expect(page.getByLabel('새로 얻은 배지')).toContainText('통합 탐험가');
   const records = await page.evaluate(() => JSON.parse(localStorage.getItem('numbercal.memory.records.v1') ?? 'null'));
   expect(records.byLevel['mixed:starter'].minAttempts).toBe(4);
+  const skillEvidence = await page.evaluate(() => JSON.parse(localStorage.getItem('numbercal.skill-mastery.v2') ?? 'null'));
+  expect(skillEvidence.entries.some((entry: { supportedCorrect: number }) => entry.supportedCorrect > 0)).toBe(true);
+  expect(skillEvidence.entries.every((entry: { independentCorrect: number }) => entry.independentCorrect === 0)).toBe(true);
   expect(await page.evaluate(() => localStorage.getItem('numbercal.memory.progress.v1'))).toBeNull();
   await page.getByRole('button', { name: '내 배지 도감 보기' }).click();
   await expect(page.getByLabel('배지 10개 중 2개 획득')).toBeVisible();

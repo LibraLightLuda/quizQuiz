@@ -1,4 +1,5 @@
 import type { Difficulty, KoreanWord, MaskRange } from '../domain/types';
+import { koreanSkillIdsFor } from '../domain/skillData';
 
 type Seed = readonly [word: string, hint: string, category: string, emoji?: string];
 
@@ -18,6 +19,7 @@ const define = (difficulty: Difficulty, seeds: readonly Seed[]): KoreanWord[] =>
     hintKo,
     emoji,
     maskRanges: rangesFor(word, difficulty),
+    skillIds: koreanSkillIdsFor(word, category),
     ttsLang: 'ko-KR'
   }));
 

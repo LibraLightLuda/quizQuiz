@@ -195,7 +195,7 @@ describe('illustration asset manifest', () => {
     koreanWords
       .filter((word) => word.difficulty === 'challenge')
       .forEach((word) => expect(questionConceptIds[word.id]).toBeDefined());
-    expect(Object.keys(questionConceptIds)).toHaveLength(289);
+    expect(Object.keys(questionConceptIds)).toHaveLength(292);
 
     const languagePairIds = [...koreanPairs, ...englishPairs].map((pair) => pair.id);
     expect(Object.keys(memoryPairConceptIds)).toHaveLength(40);

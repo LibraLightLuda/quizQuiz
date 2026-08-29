@@ -1,6 +1,23 @@
 import type { Difficulty, EnglishWord, MaskRange } from '../domain/types';
+import { englishSkillIdsFor } from '../domain/skillData';
 
 type Seed = readonly [word: string, meaning: string, category: string];
+const CVC_SYLLABLE = /[bcdfghjklmnpqrstvwxyz][aeiou][bcdfghjklmnpqrstvwxyz]/;
+
+const phonicsFor = (word: string): string[] => {
+  const skills: string[] = [];
+  const vowelTeams = ['ai', 'ay', 'ee', 'ea', 'oa', 'oo', 'ou', 'ow', 'oi', 'oy'];
+  const digraphs = ['ch', 'sh', 'th', 'ph', 'wh', 'ck', 'ng'];
+  const blends = ['bl', 'br', 'cl', 'cr', 'dr', 'fl', 'fr', 'gl', 'gr', 'pl', 'pr', 'sc', 'sk', 'sl', 'sm', 'sn', 'sp', 'st', 'sw', 'tr'];
+  if (CVC_SYLLABLE.test(word)) skills.push('cvc', 'short-vowel');
+  for (const pattern of digraphs) if (word.includes(pattern)) skills.push(`digraph-${pattern}`);
+  for (const pattern of vowelTeams) if (word.includes(pattern)) skills.push(`vowel-team-${pattern}`);
+  for (const pattern of blends) if (word.startsWith(pattern)) skills.push(`blend-${pattern}`);
+  if (/[^aeiou]e$/.test(word) && word.length <= 6) skills.push('silent-e');
+  if (word.length >= 7) skills.push('multisyllable');
+  if (!skills.length) skills.push(word.length <= 5 ? 'basic-word' : 'word-pattern');
+  return skills;
+};
 
 const rangesFor = (word: string, difficulty: Difficulty): MaskRange[] => {
   const length = word.length;
@@ -17,6 +34,8 @@ const define = (difficulty: Difficulty, seeds: readonly Seed[]): EnglishWord[] =
     difficulty,
     category,
     maskRanges: rangesFor(word, difficulty),
+    phonicsSkills: phonicsFor(word),
+    skillIds: englishSkillIdsFor(word, category),
     ttsLang: 'en-US'
   }));
 
@@ -30,7 +49,8 @@ const easy: Seed[] = [
   ['green', '초록색', 'color'], ['white', '흰색', 'color'], ['black', '검은색', 'color'], ['brown', '갈색', 'color'],
   ['cloud', '구름', 'nature'], ['river', '강', 'nature'], ['ocean', '바다', 'nature'],
   ['house', '집', 'place'], ['park', '공원', 'place'], ['store', '가게', 'place'], ['room', '방', 'place'],
-  ['happy', '행복한', 'feeling'], ['smile', '미소', 'feeling'], ['sleep', '잠자다', 'action'], ['dance', '춤추다', 'action']
+  ['happy', '행복한', 'feeling'], ['smile', '미소', 'feeling'], ['sleep', '잠자다', 'action'], ['dance', '춤추다', 'action'],
+  ['car', '자동차', 'vehicle'], ['bus', '버스', 'vehicle'], ['sun', '해', 'nature']
 ];
 
 const normal: Seed[] = [

@@ -1,6 +1,6 @@
 import { createId, shuffle, type RandomSource, CryptoRandom, SeededRandom } from '../services/randomService';
 import { storiesByLevel } from './storyData';
-import type { Story, StoryActivityState, StoryLevel, StoryProgress } from './types';
+import type { Story, StoryActivityState, StoryLevel, StoryProgress, StoryVocabularyMission } from './types';
 
 const sameOrder = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
@@ -29,7 +29,8 @@ export const createStoryActivityStates = (
 }));
 
 export const createStoryProgress = (
-  story: Story, daily = false, dateKey?: string, random: RandomSource = new CryptoRandom()
+  story: Story, daily = false, dateKey?: string, random: RandomSource = new CryptoRandom(),
+  missionVocabularyIds: readonly string[] = []
 ): StoryProgress => ({
   schemaVersion: 1,
   id: createId('story-session'),
@@ -42,8 +43,28 @@ export const createStoryProgress = (
   elapsedMs: 0,
   updatedAt: new Date().toISOString(),
   daily,
+  ...(missionVocabularyIds.length ? {
+    missionVocabularyIds: [...missionVocabularyIds],
+    missionRecallIndex: 0,
+    missionRecallCorrect: 0,
+    missionRecallComplete: false
+  } : {}),
   ...(daily && dateKey ? { dateKey } : {})
 });
+
+export const createStoryVocabularyMission = (
+  storyPool: readonly Story[], learnedWordIds: readonly string[]
+): StoryVocabularyMission | null => {
+  const learned = new Set(learnedWordIds);
+  const candidates = storyPool.map((story) => {
+    const vocabularyIds = [...new Set(story.scenes.flatMap((scene) => scene.vocabularyIds))]
+      .filter((wordId) => learned.has(wordId))
+      .slice(0, 4);
+    return { storyId: story.id, vocabularyIds };
+  }).filter((mission) => mission.vocabularyIds.length >= 2)
+    .sort((left, right) => right.vocabularyIds.length - left.vocabularyIds.length);
+  return candidates[0] ?? null;
+};
 
 export const pickStory = (
   level: StoryLevel, recentStoryIds: readonly string[], random: RandomSource = new CryptoRandom()

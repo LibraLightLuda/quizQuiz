@@ -2,9 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { playSuccessSound, unlockAudio } from '../services/soundService';
 import { cancelSpeech, speak, speechSupported } from '../services/speechService';
 import { CryptoRandom } from '../services/randomService';
-import { STORY_LEVELS, stories, storiesByLevel, storyById, storyLevelInfo } from './storyData';
 import {
-  correctSequenceSceneIds, createStoryProgress, dailyStory, isCorrectSequence, pickStory, storyDailyKey
+  STORY_LEVELS, stories, storiesByLevel, storyById, storyLevelInfo,
+  storyVocabularyById, storyVocabularyLabelById
+} from './storyData';
+import {
+  correctSequenceSceneIds, createStoryProgress, createStoryVocabularyMission,
+  dailyStory, isCorrectSequence, pickStory, storyDailyKey
 } from './storyGenerator';
 import {
   clearStoryProgress, loadStoryProgress, loadStoryRecords, rememberStoryLevel, saveStoryCompletion, saveStoryProgress
@@ -12,11 +16,12 @@ import {
 import type {
   Story, StoryActivity, StoryActivityState, StoryLevel, StoryProgress, StoryRecords, StoryResult
 } from './types';
+import type { SpeechRate } from '../domain/types';
 import { GuideCharacter } from '../visuals/GuideCharacter';
 import { storyCoverVisuals, storySceneVisuals } from '../visuals/visualAssets';
 import './story.css';
 
-type StoryScreen = 'home' | 'reading' | 'activity' | 'result' | 'library';
+type StoryScreen = 'home' | 'reading' | 'activity' | 'recall' | 'result' | 'library';
 
 const random = new CryptoRandom();
 const formatTime = (milliseconds: number): string => {
@@ -38,12 +43,15 @@ const replaceActivity = (
 });
 
 export default function StoryMode({
-  onExit, soundEnabled, ttsEnabled, animationsEnabled
+  onExit, soundEnabled, ttsEnabled, speechRate, animationsEnabled, learnedWordIds, onMissionRecallCorrect
 }: {
   onExit: () => void;
   soundEnabled: boolean;
   ttsEnabled: boolean;
+  speechRate: SpeechRate;
   animationsEnabled: boolean;
+  learnedWordIds: readonly string[];
+  onMissionRecallCorrect?: (wordId: string, skillIds: readonly string[]) => void;
 }) {
   const initialRecords = useMemo(() => loadStoryRecords(), []);
   const [records, setRecords] = useState<StoryRecords>(initialRecords);
@@ -73,7 +81,7 @@ export default function StoryMode({
   };
 
   useEffect(() => {
-    if (!progress || (screen !== 'reading' && screen !== 'activity')) return;
+    if (!progress || (screen !== 'reading' && screen !== 'activity' && screen !== 'recall')) return;
     const timer = window.setInterval(() => {
       setProgress((current) => {
         if (!current) return current;
@@ -109,19 +117,19 @@ export default function StoryMode({
     setInputLocked(false);
   };
 
-  const readAloud = async (text: string) => {
+  const readAloud = async (text: string, slow = false) => {
     if (!ttsEnabled || !speechSupported() || speaking) return;
     setSpeaking(true);
-    await speak(text, 'ko-KR');
+    await speak(text, 'ko-KR', slow ? 0.75 : speechRate);
     setSpeaking(false);
   };
 
-  const startStory = async (story: Story, daily = false) => {
+  const startStory = async (story: Story, daily = false, missionVocabularyIds: readonly string[] = []) => {
     await unlockAudio();
     cancelSpeech();
     releaseInputLock();
     const dateKey = daily ? storyDailyKey() : undefined;
-    const next = createStoryProgress(story, daily, dateKey, random);
+    const next = createStoryProgress(story, daily, dateKey, random, missionVocabularyIds);
     const nextRecords = rememberStoryLevel(records, story.level);
     setRecords(nextRecords);
     setSelectedLevel(story.level);
@@ -287,9 +295,9 @@ export default function StoryMode({
     setMessage(activity.hint);
   };
 
-  const completeStory = () => {
-    if (!progress || progress.activities.some((activity) => activity.status !== 'complete')) return;
-    const completed = saveStoryCompletion(records, progress);
+  const completeStory = (completedProgress = progress) => {
+    if (!completedProgress || completedProgress.activities.some((activity) => activity.status !== 'complete')) return;
+    const completed = saveStoryCompletion(records, completedProgress);
     setRecords(completed.records);
     setResult(completed.result);
     if (!completed.saved || !clearStoryProgress()) setStorageWarning(true);
@@ -302,6 +310,13 @@ export default function StoryMode({
     if (!progress) return;
     releaseInputLock();
     if (progress.activityIndex >= progress.activities.length - 1) {
+      if (progress.missionVocabularyIds?.length && !progress.missionRecallComplete) {
+        const next = { ...progress, screen: 'recall' as const, updatedAt: new Date().toISOString() };
+        setMessage('이야기 도움 없이 낱말을 다시 떠올려 봐요.');
+        persist(next);
+        setScreen('recall');
+        return;
+      }
       completeStory();
       return;
     }
@@ -311,10 +326,53 @@ export default function StoryMode({
     persist(next);
   };
 
+  const answerMissionRecall = (wordId: string) => {
+    if (!progress?.missionVocabularyIds?.length || progress.missionRecallSelectedWordId) return;
+    const targetWordId = progress.missionVocabularyIds[progress.missionRecallIndex ?? 0];
+    const correct = wordId === targetWordId;
+    if (correct) {
+      const vocabulary = storyVocabularyById.get(targetWordId);
+      if (vocabulary) onMissionRecallCorrect?.(targetWordId, vocabulary.skillIds);
+    }
+    persist({
+      ...progress,
+      missionRecallSelectedWordId: wordId,
+      missionRecallCorrect: (progress.missionRecallCorrect ?? 0) + (correct ? 1 : 0),
+      updatedAt: new Date().toISOString()
+    });
+    setMessage(correct ? '맞아요! 이야기 속 낱말을 다시 기억했어요.' : '괜찮아요. 정답을 보고 한 번 더 기억해요.');
+  };
+
+  const advanceMissionRecall = () => {
+    if (!progress?.missionVocabularyIds?.length || !progress.missionRecallSelectedWordId) return;
+    const index = progress.missionRecallIndex ?? 0;
+    if (index >= progress.missionVocabularyIds.length - 1) {
+      completeStory({
+        ...progress,
+        missionRecallSelectedWordId: undefined,
+        missionRecallComplete: true,
+        updatedAt: new Date().toISOString()
+      });
+      return;
+    }
+    const next = {
+      ...progress,
+      missionRecallIndex: index + 1,
+      missionRecallSelectedWordId: undefined,
+      updatedAt: new Date().toISOString()
+    };
+    setMessage('다음 낱말도 떠올려 볼까요?');
+    persist(next);
+  };
+
   if (screen === 'reading' && progress) {
     const story = storyById(progress.storyId);
     if (!story) return null;
     const scene = story.scenes[progress.pageIndex];
+    const sceneMissionWords = (progress.missionVocabularyIds ?? [])
+      .filter((wordId) => scene.vocabularyIds.includes(wordId))
+      .map((wordId) => storyVocabularyLabelById.get(wordId))
+      .filter((word): word is string => Boolean(word));
     const reviewing = Boolean(progress.reviewActivityId);
     return (
       <main className="story-screen story-reading-screen">
@@ -327,10 +385,16 @@ export default function StoryMode({
           <span className="story-scene-number">{progress.pageIndex + 1}번째 장면</span>
           <StoryScenePicture sceneId={scene.id} fallback={scene.illustration} alt={scene.alt} featured />
           <p>{scene.text}</p>
+          {sceneMissionWords.length > 0 && (
+            <aside className="story-mission-found" role="status">찾았어요! {sceneMissionWords.join(' · ')}</aside>
+          )}
           {ttsEnabled && speechSupported() && (
-            <button className={`story-listen-button ${speaking ? 'speaking' : ''}`} disabled={speaking} onClick={() => void readAloud(scene.text)}>
-              <span aria-hidden="true">🔊</span>{speaking ? '읽는 중이에요' : '이 장면 읽어 주기'}
-            </button>
+            <div className="story-listen-actions">
+              <button className={`story-listen-button ${speaking ? 'speaking' : ''}`} disabled={speaking} onClick={() => void readAloud(scene.text)}>
+                <span aria-hidden="true">🔊</span>{speaking ? '읽는 중이에요' : '이 장면 읽어 주기'}
+              </button>
+              <button className="story-slow-listen" disabled={speaking} onClick={() => void readAloud(scene.text, true)}><span aria-hidden="true">🐢</span>느리게 읽기</button>
+            </div>
           )}
         </article>
         <nav className="story-page-actions" aria-label="이야기 장면 이동">
@@ -369,7 +433,7 @@ export default function StoryMode({
         <section className="story-question-card" aria-labelledby="story-question-title">
           <p className="eyebrow">이야기를 떠올려요</p>
           <h1 id="story-question-title">{activity.prompt}</h1>
-          {ttsEnabled && speechSupported() && <button className="story-prompt-listen" disabled={speaking} onClick={() => void readAloud(activitySpeech)}>🔊 문제 읽어 주기</button>}
+          {ttsEnabled && speechSupported() && <div className="story-prompt-listen-actions"><button className="story-prompt-listen" disabled={speaking} onClick={() => void readAloud(activitySpeech)}>🔊 문제 읽어 주기</button><button className="story-prompt-listen story-prompt-slow" disabled={speaking} onClick={() => void readAloud(activitySpeech, true)}>🐢 느리게 읽기</button></div>}
         </section>
 
         {activity.type === 'choice' && state.status === 'active' && (
@@ -423,11 +487,57 @@ export default function StoryMode({
         {message && <aside className={`story-feedback ${state.status === 'complete' ? 'success' : ''}`} aria-live="polite"><span aria-hidden="true">{state.status === 'complete' ? '🌟' : '💭'}</span><strong>{message}</strong></aside>}
         {state.mustReview && <button className="story-review-button" onClick={() => startReview(activity)}>📖 이야기 다시 살펴보기</button>}
         {!state.mustReview && state.status !== 'complete' && !state.usedHint && <button className="story-hint-button" onClick={() => showHint(activity)}>힌트 보기</button>}
-        {state.status === 'complete' && <button className="primary-button story-next-button" onClick={nextActivity}>{progress.activityIndex === story.activities.length - 1 ? '결과 보기' : '다음 활동'}</button>}
+        {state.status === 'complete' && <button className="primary-button story-next-button" onClick={nextActivity}>{progress.activityIndex === story.activities.length - 1
+          ? progress.missionVocabularyIds?.length ? '낱말 떠올리기' : '결과 보기'
+          : '다음 활동'}</button>}
         <button className="story-back-to-reading" onClick={() => {
           const next = { ...progress, screen: 'reading' as const, pageIndex: 0 };
           persist(next); setScreen('reading');
         }}>이야기 처음부터 보기</button>
+      </main>
+    );
+  }
+
+  if (screen === 'recall' && progress?.missionVocabularyIds?.length) {
+    const index = progress.missionRecallIndex ?? 0;
+    const targetWordId = progress.missionVocabularyIds[index];
+    const target = storyVocabularyById.get(targetWordId);
+    if (!target) return null;
+    const selectedWordId = progress.missionRecallSelectedWordId;
+    const optionIds = index % 2 === 0
+      ? [...progress.missionVocabularyIds].reverse()
+      : progress.missionVocabularyIds;
+    return (
+      <main className="story-screen story-recall-screen">
+        <StoryTopBar title="낱말 다시 떠올리기" onBack={returnToStoryHome} />
+        <header className="story-recall-header">
+          <GuideCharacter className="story-recall-guide" decorative />
+          <div><p className="eyebrow">이야기 뒤 회상</p><h1>{index + 1} / {progress.missionVocabularyIds.length}</h1><p>문장을 다시 보지 않고 기억해 봐요.</p></div>
+        </header>
+        <section className="story-recall-question" aria-labelledby="story-recall-title">
+          <small>{target.language === 'english' ? '뜻에 맞는 영어 낱말은?' : '이 설명과 맞는 낱말은?'}</small>
+          <h2 id="story-recall-title">“{target.hint}”</h2>
+        </section>
+        <div className="story-recall-options" role="group" aria-label="회상 낱말 보기">
+          {optionIds.map((wordId) => {
+            const word = storyVocabularyById.get(wordId);
+            const selected = selectedWordId === wordId;
+            const correct = Boolean(selectedWordId) && wordId === targetWordId;
+            return <button key={wordId} disabled={Boolean(selectedWordId)}
+              className={`${selected ? 'selected' : ''} ${correct ? 'correct' : ''}`}
+              onClick={() => answerMissionRecall(wordId)}>{word?.label}</button>;
+          })}
+        </div>
+        {selectedWordId && (
+          <>
+            <aside className={`story-feedback ${selectedWordId === targetWordId ? 'success' : ''}`} aria-live="polite">
+              <span aria-hidden="true">{selectedWordId === targetWordId ? '🌟' : '💭'}</span><strong>{message}<br />정답은 {target.label}예요.</strong>
+            </aside>
+            <button className="primary-button story-next-button" onClick={advanceMissionRecall}>
+              {index === progress.missionVocabularyIds.length - 1 ? '결과 보기' : '다음 낱말'}
+            </button>
+          </>
+        )}
       </main>
     );
   }
@@ -442,6 +552,13 @@ export default function StoryMode({
         <div className="story-stars" aria-label={`별 ${result.stars}개`}>{[1, 2, 3].map((star) => <span key={star} className={star <= result.stars ? 'earned' : ''}>★</span>)}</div>
         <p className="story-result-message">{result.strengthMessage}</p>
         <p className="story-practice-note">{result.practiceMessage}</p>
+        {result.missionVocabularyIds?.length ? (
+          <aside className="story-mission-result">
+            <strong>이야기에서 다시 만난 낱말</strong>
+            <span>{result.missionVocabularyIds.map((wordId) => storyVocabularyLabelById.get(wordId)).filter(Boolean).join(' · ')}</span>
+            <small>도움 없이 다시 기억한 낱말 {result.missionRecallCorrect ?? 0} / {result.missionVocabularyIds.length}</small>
+          </aside>
+        ) : null}
         {result.earnedDailyBadge && <aside className="story-daily-badge"><span>🏅</span><strong>오늘의 이야기 배지</strong><small>새로운 이야기를 끝까지 탐험했어요!</small></aside>}
         {result.improved && <p className="story-best-note">새로운 최고 기록이에요!</p>}
         <section className="story-result-stats" aria-label="이야기 결과">
@@ -451,7 +568,7 @@ export default function StoryMode({
           <div><small>탐험 시간</small><strong>{formatTime(result.elapsedMs)}</strong></div>
         </section>
         <div className="story-result-actions">
-          <button className="primary-button" onClick={() => void startStory(story, result.daily)}>다시 읽기</button>
+          <button className="primary-button" onClick={() => void startStory(story, result.daily, result.missionVocabularyIds ?? [])}>다시 읽기</button>
           <button className="secondary-button" onClick={() => void startStory(pickStory(story.level, records.recentStoryIds, random))}>다른 이야기</button>
           <button className="secondary-button" onClick={() => setScreen('library')}>나의 이야기 도감</button>
           <button className="text-button" onClick={returnToStoryHome}>이야기 탐험대 홈</button>
@@ -482,7 +599,9 @@ export default function StoryMode({
   }
 
   const todayKey = storyDailyKey();
-  const todayStory = dailyStory(todayKey, selectedLevel);
+  const vocabularyMission = createStoryVocabularyMission(stories, learnedWordIds);
+  const missionStory = vocabularyMission ? storyById(vocabularyMission.storyId) : undefined;
+  const todayStory = missionStory ?? dailyStory(todayKey, selectedLevel);
   const todayCompleted = records.dailyBadges.includes(todayKey);
   return (
     <main className="story-screen story-home-screen">
@@ -496,11 +615,15 @@ export default function StoryMode({
       </aside>
       {savedProgress && storyById(savedProgress.storyId) && (
         <button className="story-resume-card" onClick={resumeStory}>
-          <span aria-hidden="true">▶</span><span><strong>읽던 이야기 이어서 보기</strong><small>{storyById(savedProgress.storyId)!.title} · {savedProgress.screen === 'reading' ? `${savedProgress.pageIndex + 1}번째 장면` : `${savedProgress.activityIndex + 1}번째 활동`}</small></span><b aria-hidden="true">›</b>
+          <span aria-hidden="true">▶</span><span><strong>읽던 이야기 이어서 보기</strong><small>{storyById(savedProgress.storyId)!.title} · {savedProgress.screen === 'reading'
+            ? `${savedProgress.pageIndex + 1}번째 장면`
+            : savedProgress.screen === 'recall' ? '낱말 다시 떠올리기' : `${savedProgress.activityIndex + 1}번째 활동`}</small></span><b aria-hidden="true">›</b>
         </button>
       )}
-      <button className="story-daily-card" onClick={() => void startStory(todayStory, true)}>
-        <span aria-hidden="true">☀️</span><span><strong>오늘의 이야기 · {todayStory.title}</strong><small>{todayCompleted ? '오늘의 배지를 받았어요! 다시 읽어 볼까요?' : '완료하면 특별 배지를 받아요'}</small></span><b aria-hidden="true">›</b>
+      <button className="story-daily-card" onClick={() => void startStory(todayStory, true, vocabularyMission?.vocabularyIds ?? [])}>
+        <span aria-hidden="true">☀️</span><span><strong>{vocabularyMission ? '오늘의 낱말 미션' : '오늘의 이야기'} · {todayStory.title}</strong><small>{vocabularyMission
+          ? `배운 낱말을 찾아요: ${vocabularyMission.vocabularyIds.map((wordId) => storyVocabularyLabelById.get(wordId)).filter(Boolean).join(' · ')}`
+          : todayCompleted ? '오늘의 배지를 받았어요! 다시 읽어 볼까요?' : '완료하면 특별 배지를 받아요'}</small></span><b aria-hidden="true">›</b>
       </button>
       <section className="story-level-section">
         <div className="story-section-title"><div><p className="eyebrow">내게 맞게 골라요</p><h2>어느 단계로 읽을까요?</h2></div><button onClick={() => setScreen('library')}>도감 보기</button></div>

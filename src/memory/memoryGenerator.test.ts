@@ -23,6 +23,18 @@ describe('학습형 기억력 카드 생성', () => {
     expect(new Set(progress.cards.map((card) => card.category))).toEqual(new Set(['math', 'korean', 'english']));
   });
 
+  it('언어 카드 쌍은 같은 단어 ID와 기술 태그를 공유한다', () => {
+    const progress = createMemoryProgress('english', 'master', 'english-evidence');
+    const tagged = progress.cards.filter((card) => card.wordId);
+    expect(tagged.length).toBeGreaterThan(0);
+    for (const card of tagged) {
+      const partner = progress.cards.find((candidate) => candidate.pairId === card.pairId && candidate.id !== card.id)!;
+      expect(partner.wordId).toBe(card.wordId);
+      expect(partner.skillIds).toEqual(card.skillIds);
+      expect(card.skillIds?.length).toBeGreaterThan(0);
+    }
+  });
+
   it('일일 도전 시드는 같은 배치를 재현하고 일반 게임은 최근 배치를 피한다', () => {
     const first = createMemoryProgress('mixed', 'growing', 'daily-2026-08-14', true, '2026-08-14');
     const same = createMemoryProgress('mixed', 'growing', 'daily-2026-08-14', true, '2026-08-14');

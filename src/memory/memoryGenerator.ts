@@ -51,8 +51,8 @@ const pickPairs = (mode: MemoryMode, count: number, random: RandomSource): Memor
 
 const toCards = (selected: readonly MemoryPair[], random: RandomSource): MemoryCard[] => {
   const cards = selected.flatMap((pair) => [
-    { id: `${pair.id}-q`, pairId: pair.id, content: pair.left, category: pair.category, side: 'question' as const },
-    { id: `${pair.id}-a`, pairId: pair.id, content: pair.right, category: pair.category, side: 'answer' as const }
+    { id: `${pair.id}-q`, pairId: pair.id, content: pair.left, category: pair.category, side: 'question' as const, wordId: pair.wordId, skillIds: pair.skillIds },
+    { id: `${pair.id}-a`, pairId: pair.id, content: pair.right, category: pair.category, side: 'answer' as const, wordId: pair.wordId, skillIds: pair.skillIds }
   ]);
   let shuffled = shuffle(random, cards);
   // 첫 화면부터 같은 쌍이 이웃하는 우연을 줄여 게임이 너무 쉽게 끝나지 않게 한다.

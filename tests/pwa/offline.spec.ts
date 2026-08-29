@@ -1,5 +1,19 @@
 import { expect, test } from '@playwright/test';
 
+const offlineRecordTransfer = JSON.stringify({
+  kind: 'numbercal-learning-records', schemaVersion: 1, exportedAt: '2026-08-30T00:00:00.000Z',
+  records: {
+    'numbercal.history.v1': { schemaVersion: 1, sessions: [] },
+    'numbercal.language-mastery.v1': { schemaVersion: 1, entries: [] },
+    'numbercal.skill-mastery.v2': { schemaVersion: 2, entries: [], migratedFromWordMastery: true },
+    'numbercal.sudoku.records.v1': null,
+    'numbercal.memory.records.v1': null,
+    'numbercal.story.records.v1': null,
+    'numbercal.balance.records.v1': null,
+    'numbercal.number-path.records.v1': null
+  }
+});
+
 test('하위 경로 PWA가 올바른 scope로 설치되고 오프라인 학습을 완료한다', async ({ page, context, request }) => {
   const baseUrl = 'http://127.0.0.1:4176/NumberCal/';
   const manifestResponse = await request.get(`${baseUrl}manifest.webmanifest`);
@@ -21,6 +35,15 @@ test('하위 경로 PWA가 올바른 scope로 설치되고 오프라인 학습�
   await context.setOffline(true);
   await page.reload();
   await expect(page.getByRole('heading', { name: '어린이 학습 놀이터' })).toBeVisible();
+  await page.getByRole('button', { name: '설정 열기' }).click();
+  await page.locator('input[type="file"]').setInputFiles({
+    name: 'numbercal-learning-records.json', mimeType: 'application/json', buffer: Buffer.from(offlineRecordTransfer)
+  });
+  await expect(page.getByLabel('불러올 학습 기록 미리보기')).toContainText('기록 묶음 3개');
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: '이 기록 불러오기' }).click();
+  await expect(page.getByRole('status')).toContainText('학습 기록을 불러왔어요.');
+  await page.getByRole('button', { name: '뒤로 가기' }).click();
   await page.getByRole('button', { name: '숫자 길 찾기 숫자를 이어 목표 합을 만들어요' }).click();
   await expect(page.getByRole('heading', { name: '시작 칸에서 출발해요' })).toBeVisible();
   await page.getByRole('button', { name: '뒤로 가기' }).click();
@@ -36,11 +59,11 @@ test('하위 경로 PWA가 올바른 scope로 설치되고 오프라인 학습�
   await page.getByRole('button', { name: '뒤로 가기' }).click();
   await page.getByRole('button', { name: /수학 더하고/ }).click();
   await page.getByRole('button', { name: /^덧셈 / }).click();
-  await page.getByRole('button', { name: /시작할래요/ }).click();
-  for (let index = 0; index < 15; index += 1) {
+  await page.getByRole('button', { name: /작은 모험 시작/ }).click();
+  for (let index = 0; index < 5; index += 1) {
     await page.locator('.option-button:not([disabled])').first().click();
-    await page.getByRole('button', { name: index === 14 ? '결과 보기' : '다음 문제' }).click();
-    if (index < 14) await expect(page.getByText(`${index + 2} / 15`)).toBeVisible({ timeout: 3000 });
+    await page.getByRole('button', { name: index === 4 ? '오늘 찾은 것 보기' : '다음 친구' }).click();
+    if (index < 4) await expect(page.getByText(`${index + 2} / 5`)).toBeVisible({ timeout: 3000 });
   }
   await expect(page.locator('.result-screen')).toBeVisible({ timeout: 3000 });
   await page.getByRole('button', { name: '처음으로' }).click();

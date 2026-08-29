@@ -1,4 +1,6 @@
 import type { Story, StoryActivityKind, StoryLevel } from './types';
+import { koreanWords } from '../data/koreanWords';
+import { englishWords } from '../data/englishWords';
 
 export const STORY_LEVELS: StoryLevel[] = ['sprout', 'step', 'explorer', 'thinker'];
 
@@ -10,6 +12,31 @@ export const storyLevelInfo: Record<StoryLevel, { label: string; description: st
 };
 
 type SceneInput = readonly [illustration: string, text: string, alt: string];
+
+const storyVocabulary = [
+  ...koreanWords.map((word) => ({
+    id: word.id, label: word.word, matchText: word.word, hint: word.hintKo,
+    language: 'korean' as const, skillIds: word.skillIds
+  })),
+  ...englishWords.map((word) => ({
+    id: word.id, label: word.word, matchText: word.meaningKo, hint: word.meaningKo,
+    language: 'english' as const, skillIds: word.skillIds
+  }))
+];
+const storyVocabularyIds = new Set(storyVocabulary.map((item) => item.id));
+
+export const storyVocabularyLabelById = new Map(storyVocabulary.map((item) => [item.id, item.label]));
+export const storyVocabularyById = new Map(storyVocabulary.map((item) => [item.id, item]));
+
+const containsVocabulary = (text: string, label: string): boolean => {
+  if (Array.from(label).length > 1) return text.includes(label);
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^가-힣])${escaped}(?=$|[^가-힣])`).test(text);
+};
+
+const sentenceLevelByStory: Record<StoryLevel, 0 | 1 | 2 | 3> = {
+  sprout: 0, step: 1, explorer: 2, thinker: 3
+};
 type QuestionInput = {
   kind: StoryActivityKind;
   prompt: string;
@@ -31,9 +58,15 @@ const makeStory = (input: {
   detail: QuestionInput;
   thinking: QuestionInput;
 }): Story => {
-  const scenes = input.scenes.map(([illustration, text, alt], index) => ({
-    id: `${input.id}-scene-${index + 1}`, illustration, text, alt
-  }));
+  const scenes = input.scenes.map(([illustration, text, alt], index) => {
+    const vocabulary = storyVocabulary.filter((item) => containsVocabulary(text, item.matchText));
+    return {
+      id: `${input.id}-scene-${index + 1}`, illustration, text, alt,
+      vocabularyIds: [...new Set(vocabulary.map((item) => item.id))],
+      skillIds: [...new Set(vocabulary.flatMap((item) => item.skillIds))],
+      sentenceLevel: sentenceLevelByStory[input.level]
+    };
+  });
   const choice = (suffix: string, question: QuestionInput, evidenceRequired: boolean) => {
     const options = [question.correct, ...question.wrong].map((label, index) => ({
       id: `${input.id}-${suffix}-option-${index + 1}`, label
@@ -235,6 +268,8 @@ export const validateStories = (values: readonly Story[] = stories): string[] =>
     if (sceneIds.size !== story.scenes.length) errors.push(`${story.id}: 장면 ID 중복`);
     story.scenes.forEach((scene) => {
       if (!scene.text.trim() || !scene.alt.trim() || !scene.illustration.trim()) errors.push(`${scene.id}: 장면 내용 누락`);
+      if (scene.vocabularyIds.some((wordId) => !storyVocabularyIds.has(wordId))) errors.push(`${scene.id}: 낱말 태그 오류`);
+      if (scene.sentenceLevel !== sentenceLevelByStory[story.level]) errors.push(`${scene.id}: 문장 수준 오류`);
     });
     story.activities.forEach((activity) => {
       if (activity.type === 'sequence') {

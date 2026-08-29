@@ -112,6 +112,7 @@ test('홈은 완료하지 않은 오늘의 균형 활동을 추천한다', async
     const now = new Date();
     const key = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     localStorage.setItem('numbercal.story.records.v1', JSON.stringify({ schemaVersion: 1, dailyBadges: [key] }));
+    localStorage.setItem('numbercal.number-path.records.v1', JSON.stringify({ schemaVersion: 1, dailyBadges: [key] }));
     localStorage.setItem('numbercal.balance.records.v1', JSON.stringify(balanceRecords));
   }, records);
   await page.goto('./');

@@ -1,7 +1,7 @@
 {
   "name": "numbercal-learning-playground",
   "private": true,
-  "version": "1.2.2",
+  "version": "1.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,7 +13,9 @@
     "test:pwa": "node scripts/build-pages.mjs && playwright test --config=playwright.pwa.config.ts",
     "test:budget": "npm run build && node scripts/check-build-budget.mjs",
     "optimize:story-images": "node scripts/optimize-story-images.mjs",
-    "validate:data": "vitest run src/domain/dataValidation.test.ts"
+    "validate:data": "npm run validate:content",
+    "validate:content": "vitest run src/domain/dataValidation.test.ts src/domain/skillData.test.ts src/domain/contentQuality.test.ts src/story/storyData.test.ts src/visuals/visualAssets.test.ts",
+    "report:content": "node scripts/content-quality-report.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "6.0.5",

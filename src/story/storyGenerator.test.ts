@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { SeededRandom } from '../services/randomService';
-import { storiesByLevel } from './storyData';
-import { createStoryProgress, dailyStory, isCorrectSequence, pickStory } from './storyGenerator';
+import { koreanWords } from '../data/koreanWords';
+import { stories, storiesByLevel } from './storyData';
+import {
+  createStoryProgress, createStoryVocabularyMission, dailyStory, isCorrectSequence, pickStory
+} from './storyGenerator';
 
 describe('이야기 선택과 활동 생성', () => {
   it('최근 완료한 이야기를 우선 피한다', () => {
@@ -26,5 +29,14 @@ describe('이야기 선택과 활동 생성', () => {
       expect(isCorrectSequence(sequenceState.sequenceOrder, sequence.sceneIds)).toBe(false);
       expect(new Set(sequenceState.sequenceOrder)).toEqual(new Set(sequence.sceneIds));
     }
+  });
+
+  it('최근 배운 낱말 2~4개가 함께 나오는 이야기 미션을 만든다', () => {
+    const learned = ['놀이터', '장갑'].map((label) => koreanWords.find((word) => word.word === label)!.id);
+    const mission = createStoryVocabularyMission(stories, learned);
+    expect(mission).toEqual({ storyId: 'sprout-lost-mitten', vocabularyIds: learned });
+    const story = stories.find((item) => item.id === mission!.storyId)!;
+    const progress = createStoryProgress(story, true, '2026-08-29', new SeededRandom(3), mission!.vocabularyIds);
+    expect(progress.missionVocabularyIds).toEqual(learned);
   });
 });

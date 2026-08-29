@@ -7,6 +7,10 @@
 - 수학: 덧셈, 뺄셈, 곱셈, 세 연산이 섞인 사칙연산과 4단계 난이도별 수 범위
 - 한국어: 완성형 음절 또는 음절 묶음 빈칸 문제와 한국어 듣기
 - 영어: 글자 또는 철자 묶음 빈칸 문제와 영어 듣기
+- 한국어·영어 단어별 숙련도와 간격 복습, 세션 안의 오답 재출제
+- 말놀이 탐험·Word Quest에서 소리 찾기, 직접 타일을 놓는 낱말 조립과 단계 힌트, 그림 연결, 문장 완성 활동
+- 영어 단어별 파닉스 패턴 메타데이터와 숙련도 기반 맞춤 출제
+- 한국어 K0~K3·영어 E0~E4 기술 그래프, 선수 기술 잠금, 기술 숙련도 v2와 기존 기록 자동 이관
 - 스도쿠: 4×4 첫걸음, 6×6 쑥쑥, 9×9 척척·달인의 4단계 퍼즐과 오늘의 스도쿠
 - 스도쿠 단계별 규칙 튜토리얼, 겹치는 숫자 안내, 무작위 입력 방지, 힌트와 자동 저장
 - 기억력 챌린지: 같은 그림이 아닌 수식↔답, 낱말↔뜻을 연결하는 수학·한국어·영어·통합 모드
@@ -14,11 +18,12 @@
 - 균형 저울: 숫자·도형 추로 등식을 완성하는 4단계·5문제 논리 퍼즐, 규칙 연습, 오늘의 도전, 배지와 이어하기
 - 숫자 길 찾기: 상하좌우 숫자 경로로 목표 합을 만드는 4단계 퍼즐, 조작 연습, 힌트, 오늘의 길과 이어하기
 - 이야기 탐험대: 4단계 이야기 24편, 108개 장면, 듣기와 순서·기억·추론 활동
-- 한국어·영어 전체 289문제의 284개 WebP 개념 그림과 수학 수 모형 힌트
+- 최근 배운 낱말을 이야기 전·장면 중·이야기 후 회상으로 다시 만나는 오늘의 미션과 동일 단어 ID를 쓰는 기억력 카드 보조 학습
+- 한국어·영어 전체 292문제의 284개 WebP 개념 그림과 수학 수 모형 힌트
 - 쉬움·보통·어려움은 난이도별 3~4개 보기, 도전은 숫자·글자 직접 입력
-- 모든 학습은 항상 15문제이며 문제마다 제한 시간 30초
+- 기본은 5문제 작은 모험이며 원할 때 15문제 긴 모험을 선택할 수 있습니다. 한국어·영어는 시간 제한 없이, 수학은 문제마다 30초로 진행합니다.
 - 정답 축하 효과, 부드러운 오답 안내, 연속 정답 칭찬
-- 효과음, TTS, 애니메이션 설정과 최근 완료 기록 20개 로컬 저장
+- 효과음, TTS 3단계 읽기 속도·느리게 다시 듣기, 애니메이션 설정과 최근 완료 기록 20개·언어 숙련도 로컬 저장
 - iOS/Android safe area, 키보드, 동작 줄이기, 가로 화면 대응
 - 설치 가능한 PWA와 오프라인 앱 캐시
 
@@ -55,7 +60,7 @@ npm run test:e2e
 1. 이 폴더를 GitHub 저장소에 push합니다.
 2. GitHub 저장소의 **Settings → Pages**로 이동합니다.
 3. **Build and deployment → Source**를 **GitHub Actions**로 선택합니다.
-4. `master` 또는 `main` 브랜치에 push하면 `Deploy learning PWA to GitHub Pages` 작업이 테스트·빌드·배포를 수행합니다.
+4. `master` 또는 `main` 브랜치에 push하면 `Deploy learning PWA to GitHub Pages` 작업이 단위·브라우저·PWA 오프라인·용량 검사를 모두 통과한 뒤 배포합니다.
 5. 완료 후 Pages에 표시된 주소를 엽니다.
 
 워크플로가 저장소 이름을 읽어 Vite와 PWA의 base path를 자동으로 `/<RepositoryName>/`으로 설정합니다. `owner.github.io` 저장소만 `/`를 사용합니다. 소스 코드에서 asset 루트 경로를 직접 가정하지 않습니다.
@@ -86,17 +91,28 @@ npm run test:e2e
 
 ```bash
 npm run validate:data
+npm run report:content
 npm test
 ```
 
+`validate:data`는 콘텐츠 스키마, 고유 ID, 기술·그림 연결, 모호한 정답 조각, 기술별 최소 낱말 수와 인식형·생산형·문맥형 활동 범위를 함께 검사합니다. `report:content`는 낱말·그림·기술·이야기 장면의 현재 커버리지를 표로 출력합니다.
+
+전체 화면 변경은 `npm run test:e2e`에서 320px 터치 크기, 색상 대비, 키보드 초점, 스크린리더 이름과 대화상자 초점 복원도 함께 검사합니다.
+
 각 언어는 난이도마다 최소 30개 단어를 유지해야 합니다. 영어 표제어는 소문자 `a-z` 한 단어만 사용하고, 한국어는 완성형 음절로 작성합니다.
+영어 단어의 `phonicsSkills`는 철자 패턴에서 자동 생성되며 데이터 검증에서 비어 있지 않은지 확인합니다.
+현재 언어 콘텐츠 카탈로그 스키마는 `v1`이며 `src/domain/contentCatalog.ts`에서 관리합니다.
+
+## 학습 기록 옮기기
+
+설정의 **학습 기록 옮기기**에서 완료한 학습·게임 기록과 언어 숙련도를 JSON 파일로 만들거나 불러올 수 있습니다. 파일을 고른 뒤에는 먼저 포함된 기록 수를 보여 주며, **이 기록 불러오기**를 눌러야 적용됩니다. 설정, 이름 같은 개인정보, 진행 중인 놀이는 파일에 담지 않습니다.
 
 ## 난이도 규칙 변경
 
 - 공통 표시명과 보기 수: `src/domain/difficulty.ts`
 - 수학 범위와 오답: `src/domain/mathGenerator.ts`
 - 한국어·영어 마스크와 유사 오답: `src/domain/languageGenerator.ts`
-- 문제 수와 시간 제한: `src/domain/difficulty.ts`의 `SESSION_LENGTH`, `QUESTION_TIME_SECONDS`
+- 세션 길이와 시간 제한: `src/domain/difficulty.ts`의 `DEFAULT_SESSION_LENGTH`, `LONG_SESSION_LENGTH`, `QUESTION_TIME_SECONDS`
 
 난이도 규칙을 바꿀 때는 `IMPLEMENTATION_SPEC.md`의 범위와 일치시키고 생성기 테스트를 함께 수정합니다.
 
@@ -120,4 +136,4 @@ public/icons/  PWA 및 iOS 앱 아이콘
 .github/workflows/deploy-pages.yml  GitHub Pages 자동 배포
 ```
 
-제품과 구현의 기준 문서는 [`IMPLEMENTATION_SPEC.md`](IMPLEMENTATION_SPEC.md)입니다.
+제품과 구현의 기준 문서는 [`IMPLEMENTATION_SPEC.md`](IMPLEMENTATION_SPEC.md)입니다. 한국어·영어의 기술 그래프, 새 활동, 이야기 통합과 품질 게이트는 [`LANGUAGE_QUALITY_ROADMAP.md`](LANGUAGE_QUALITY_ROADMAP.md)에 정리되어 있습니다.

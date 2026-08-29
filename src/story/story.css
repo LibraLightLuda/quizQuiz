@@ -59,6 +59,17 @@
 .story-progress i { min-width: 0; border-radius: 99px; background: #dedbe8; }
 .story-progress i.done { background: #42a879; }
 .story-review-banner { margin: 0 0 12px; padding: 12px 14px; border-radius: 16px; background: #fff5d6; color: #765616; font-weight: 800; line-height: 1.45; }
+.story-mission-found { margin: -6px 0 14px; padding: 8px 12px; border-radius: 13px; background: #fff3bd; color: #765400; font-weight: 900; }
+.story-mission-result { width: 100%; margin: -7px 0 18px; padding: 13px; display: grid; gap: 5px; border: 2px solid #efd074; border-radius: 18px; background: #fff8d9; color: #725e27; }
+.story-mission-result span { font-size: 18px; font-weight: 900; }
+.story-mission-result small { color: #725e27; font-weight: 750; }
+.story-recall-header { min-height: 150px; padding: 18px; display: flex; align-items: center; gap: 14px; border: 2px solid #d8d2ff; border-radius: 26px; background: linear-gradient(135deg,#f2efff,#fff8d8); }
+.story-recall-guide { width: 92px; height: 110px; object-fit: contain; }.story-recall-header h1,.story-recall-header p { margin: 3px 0; }
+.story-recall-question { margin-top: 14px; padding: 22px 18px; border: 2px solid #e0dced; border-radius: 24px; background: white; text-align: center; }
+.story-recall-question small { color: var(--muted); font-weight: 800; }.story-recall-question h2 { margin: 10px 0 0; font-size: clamp(23px,6vw,31px); line-height: 1.4; word-break: keep-all; }
+.story-recall-options { margin-top: 12px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
+.story-recall-options button { min-height: 68px; padding: 11px; border: 3px solid #dedbea; border-radius: 19px; background: white; color: var(--ink); font-size: 20px; font-weight: 900; cursor: pointer; overflow-wrap: anywhere; }
+.story-recall-options button.correct { border-color: #37a675; background: var(--success-soft); color: #116645; }.story-recall-options button.selected:not(.correct) { border-color: #e59a68; background: var(--gentle-soft); color: #8e4925; }
 .story-scene-card { min-height: 520px; padding: 22px 26px 26px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px solid #dceade; border-radius: 31px; background: linear-gradient(180deg, #ffffff, #f2fbf6); box-shadow: var(--shadow); text-align: center; }
 .story-scene-number { align-self: flex-start; padding: 6px 10px; border-radius: 10px; background: #edf7f1; color: #277552; font-size: 13px; font-weight: 850; }
 .story-illustration { width: min(220px, 62vw); height: min(220px, 62vw); margin: 14px auto 8px; display: grid; place-items: center; border: 2px solid #e1eee5; border-radius: 42%; background: radial-gradient(circle, #fffde7, #eaf8f0); font-size: clamp(90px, 28vw, 138px); filter: drop-shadow(0 12px 16px rgba(43, 85, 62, .1)); }
@@ -67,6 +78,7 @@
 .story-scene-card > p { max-width: 27ch; margin: 12px auto 18px; font-size: clamp(22px, 5.4vw, 29px); font-weight: 800; line-height: 1.55; letter-spacing: -.02em; word-break: keep-all; }
 .story-listen-button { min-height: 54px; padding: 10px 17px; display: flex; align-items: center; gap: 8px; border: 2px solid #c9e6d6; border-radius: 17px; background: white; color: #216d4b; font-weight: 850; cursor: pointer; }
 .story-listen-button.speaking { animation: storyPulse .8s ease-in-out infinite alternate; }
+.story-listen-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }.story-listen-actions .story-listen-button { flex: 1 1 180px; justify-content: center; }.story-slow-listen { min-height: 54px; flex: 1 1 140px; padding: 10px 13px; border: 2px solid #d8d2f2; border-radius: 17px; background: #f2f0ff; color: #5142bb; font-weight: 850; cursor: pointer; }.story-slow-listen span { margin-right: 5px; }
 .story-page-actions { margin-top: 14px; display: grid; grid-template-columns: 1fr 1.3fr; gap: 10px; }
 .story-page-actions button { min-height: 58px; }
 .story-page-actions button:disabled { opacity: .45; }
@@ -80,6 +92,7 @@
 .story-question-card { min-height: 190px; padding: 25px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px solid #dfdded; border-radius: 28px; background: white; box-shadow: var(--shadow); text-align: center; }
 .story-question-card h1 { max-width: 25ch; margin: 0; font-size: clamp(24px, 6vw, 34px); line-height: 1.35; letter-spacing: -.035em; word-break: keep-all; }
 .story-prompt-listen { min-height: 44px; margin-top: 16px; padding: 8px 13px; border: 1px solid #d6d1ef; border-radius: 14px; background: #f2f0ff; color: var(--primary-dark); font-size: 14px; font-weight: 800; cursor: pointer; }
+.story-prompt-listen-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; }.story-prompt-listen-actions .story-prompt-listen { margin-top: 16px; }.story-prompt-slow { border-color: #badfc9; background: #effaf4; color: #216d4b; }
 
 .story-choice-grid { margin-top: 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .story-choice-grid.choices-3 > button:last-child { grid-column: 1 / -1; }

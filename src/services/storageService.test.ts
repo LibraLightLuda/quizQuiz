@@ -6,9 +6,33 @@ describe('로컬 저장', () => {
   beforeEach(() => localStorage.clear());
 
   it('설정을 저장하고 다시 불러온다', () => {
-    const settings = { ...DEFAULT_SETTINGS, sound: false };
+    const settings = { ...DEFAULT_SETTINGS, sound: false, speechRate: 0.95 as const };
     expect(saveSettings(settings)).toBe(true);
     expect(loadSettings().sound).toBe(false);
+    expect(loadSettings().speechRate).toBe(0.95);
+  });
+
+  it('이전 설정에는 기본 듣기 속도를 보완하고 잘못된 값은 사용하지 않는다', () => {
+    localStorage.setItem('numbercal.settings.v1', JSON.stringify({
+      schemaVersion: 1, sound: true, tts: true, animations: true, lastConfig: DEFAULT_SETTINGS.lastConfig
+    }));
+    expect(loadSettings().speechRate).toBe(0.85);
+    localStorage.setItem('numbercal.settings.v1', JSON.stringify({ ...DEFAULT_SETTINGS, speechRate: 2 }));
+    expect(loadSettings().speechRate).toBe(0.85);
+  });
+  it('말놀이 탐험 모드를 마지막 선택으로 저장한다', () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      lastConfig: {
+        subject: 'korean' as const,
+        mode: 'ko-adventure' as const,
+        difficulty: 'easy' as const,
+        length: 5 as const,
+        theme: 'animals' as const
+      }
+    };
+    expect(saveSettings(settings)).toBe(true);
+    expect(loadSettings().lastConfig).toEqual(settings.lastConfig);
   });
 
   it('손상된 JSON은 기본값으로 복구한다', () => {
@@ -21,7 +45,17 @@ describe('로컬 저장', () => {
       ...DEFAULT_SETTINGS,
       lastConfig: { subject: 'english', mode: 'en-fill', difficulty: 'sprout', length: 5, pace: 'fast' }
     }));
-    expect(loadSettings().lastConfig).toEqual({ subject: 'english', mode: 'en-fill', difficulty: 'easy' });
+    expect(loadSettings().lastConfig).toEqual({ subject: 'english', mode: 'en-fill', difficulty: 'easy', length: 5, theme: 'animals' });
+  });
+
+  it('이전 설정에 새 모험 정보가 없으면 작은 동물 모험으로 보완한다', () => {
+    localStorage.setItem('numbercal.settings.v1', JSON.stringify({
+      ...DEFAULT_SETTINGS,
+      lastConfig: { subject: 'korean', mode: 'ko-fill', difficulty: 'normal' }
+    }));
+    expect(loadSettings().lastConfig).toEqual({
+      subject: 'korean', mode: 'ko-fill', difficulty: 'normal', length: 5, theme: 'animals'
+    });
   });
 
   it('최근 완료 기록은 20개만 유지한다', () => {
@@ -65,6 +99,7 @@ describe('로컬 저장', () => {
     localStorage.setItem('numbercal.history.v1', '{}');
     localStorage.setItem('numbercal.sudoku.records.v1', '{}');
     localStorage.setItem('numbercal.memory.records.v1', '{}');
+    localStorage.setItem('numbercal.skill-mastery.v2', '{}');
     localStorage.setItem('numbercal.story.records.v1', '{}');
     localStorage.setItem('numbercal.balance.records.v1', '{}');
     localStorage.setItem('numbercal.number-path.records.v1', '{}');
@@ -73,6 +108,7 @@ describe('로컬 저장', () => {
     localStorage.setItem('numbercal.settings.v1', JSON.stringify(DEFAULT_SETTINGS));
     expect(clearAllLearningRecords()).toBe(true);
     expect(localStorage.getItem('numbercal.history.v1')).toBeNull();
+    expect(localStorage.getItem('numbercal.skill-mastery.v2')).toBeNull();
     expect(localStorage.getItem('numbercal.balance.records.v1')).toBeNull();
     expect(localStorage.getItem('numbercal.number-path.records.v1')).toBeNull();
     expect(localStorage.getItem('numbercal.balance.progress.v1')).not.toBeNull();

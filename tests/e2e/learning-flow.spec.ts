@@ -1,19 +1,27 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const SESSION_LENGTH = 15;
+const SESSION_LENGTH = 5;
 
 const start = async (page: Page, subject: RegExp, mode: RegExp, difficulty?: RegExp) => {
   await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.setItem('numbercal.language-warmup.v1', 'done');
+    for (const subjectName of ['korean', 'english']) {
+      for (const activity of ['sound-match', 'word-build', 'picture-link', 'sentence-complete']) {
+        localStorage.setItem(`numbercal.language-activity-demo.v1:${subjectName}:${activity}`, 'done');
+      }
+    }
+  });
   await page.getByRole('button', { name: subject }).click();
   await page.getByRole('button', { name: mode }).click();
   if (difficulty) await page.getByRole('radio', { name: difficulty }).click();
-  await page.getByRole('button', { name: /시작할래요/ }).click();
+  await page.getByRole('button', { name: /작은 모험 시작|길게 놀기 시작/ }).click();
 };
 
 const finishWithFirstChoices = async (page: Page, startIndex = 0) => {
   for (let index = startIndex; index < SESSION_LENGTH; index += 1) {
     await page.locator('.option-button:not([disabled])').first().click();
-    await page.getByRole('button', { name: index === SESSION_LENGTH - 1 ? '결과 보기' : '다음 문제' }).click();
+    await page.getByRole('button', { name: index === SESSION_LENGTH - 1 ? '오늘 찾은 것 보기' : '다음 친구' }).click();
     if (index < SESSION_LENGTH - 1) {
       await expect(page.getByText(`${index + 2} / ${SESSION_LENGTH}`)).toBeVisible({ timeout: 3000 });
     }
@@ -35,7 +43,9 @@ const installSpeechMock = async (page: Page) => {
       constructor(text: string) { this.text = text; }
     }
     const spoken: string[] = [];
+    const rates: number[] = [];
     Object.defineProperty(window, '__spokenForTest', { value: spoken, configurable: true });
+    Object.defineProperty(window, '__speechRatesForTest', { value: rates, configurable: true });
     Object.defineProperty(window, 'SpeechSynthesisUtterance', { value: MockUtterance, configurable: true });
     Object.defineProperty(window, 'speechSynthesis', {
       configurable: true,
@@ -43,6 +53,7 @@ const installSpeechMock = async (page: Page) => {
         getVoices: () => [], addEventListener: () => undefined, cancel: () => undefined,
         speak: (utterance: MockUtterance) => {
           spoken.push(utterance.text);
+          rates.push(utterance.rate);
           window.setTimeout(() => utterance.onend?.(), 20);
         }
       }
@@ -50,27 +61,152 @@ const installSpeechMock = async (page: Page) => {
   });
 };
 
-test('문제 수와 시간은 15문제·30초로 고정되고 조절 UI와 새싹이 없다', async ({ page }) => {
+test('성장 숲과 길게 누르는 보호자 요약에서 다음 학습 흐름을 확인한다', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.addInitScript(() => {
+    const now = '2026-08-29T02:00:00.000Z';
+    localStorage.setItem('numbercal.language-mastery.v1', JSON.stringify({ schemaVersion: 1, entries: [
+      { key: 'ko-fill:ko-easy-1', wordId: 'ko-easy-1', mode: 'ko-fill', stage: 'mastered', attempts: 4, correctCount: 3, correctStreak: 3, averageResponseMs: 1100, lastSeenAt: now, nextReviewAt: '2026-09-05T02:00:00.000Z' },
+      { key: 'en-fill:en-easy-1', wordId: 'en-easy-1', mode: 'en-fill', stage: 'learning', attempts: 2, correctCount: 1, correctStreak: 1, averageResponseMs: 1400, lastSeenAt: now, nextReviewAt: '2026-08-30T02:00:00.000Z' }
+    ] }));
+    localStorage.setItem('numbercal.skill-mastery.v2', JSON.stringify({ schemaVersion: 2, migratedFromWordMastery: true, entries: [
+      { skillId: 'ko-meaning-picture', attempts: 4, independentCorrect: 3, supportedCorrect: 0, recentAccuracy: 1, hintRate: 0.25, lastSeenAt: now, nextReviewAt: '2026-09-05T02:00:00.000Z', confidence: 0.82, recentIndependent: [true, true, true] },
+      { skillId: 'ko-syllable-count', attempts: 2, independentCorrect: 1, supportedCorrect: 0, recentAccuracy: 0.5, hintRate: 0.5, lastSeenAt: now, nextReviewAt: '2026-08-30T02:00:00.000Z', confidence: 0.3, recentIndependent: [false, true] }
+    ] }));
+    localStorage.setItem('numbercal.history.v1', JSON.stringify({ schemaVersion: 1, sessions: [
+      { id: 'growth-ko', completedAt: now, config: { subject: 'korean', mode: 'ko-fill', difficulty: 'easy', length: 5, theme: 'animals' }, correctCount: 4, incorrectCount: 1, timeoutCount: 0, totalCount: 5, averageResponseMs: 1200 },
+      { id: 'growth-en', completedAt: now, config: { subject: 'english', mode: 'en-fill', difficulty: 'easy', length: 5, theme: 'food' }, correctCount: 3, incorrectCount: 2, timeoutCount: 0, totalCount: 5, averageResponseMs: 1500 }
+    ] }));
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: '나의 성장 숲 열기' }).click();
+  await expect(page.getByRole('heading', { name: '오늘 만난 친구' })).toBeVisible();
+  await expect(page.getByText('놀이터 · apple')).toBeVisible();
+  await expect(page.getByText('도움 뒤에 혼자 찾았어요')).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('ko-meaning-picture');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await page.getByRole('button', { name: '보호자' }).click();
+  const holdButton = page.getByRole('button', { name: '보호자가 길게 누르기' });
+  await holdButton.click();
+  await expect(page.getByRole('heading', { name: '다음 도움을 한눈에 살펴보세요' })).toHaveCount(0);
+  await holdButton.dispatchEvent('pointerdown', { pointerId: 1, pointerType: 'touch', isPrimary: true });
+  await page.waitForTimeout(1600);
+  await expect(page.getByRole('heading', { name: '다음 도움을 한눈에 살펴보세요' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '익힌 것' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '연습 중' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '다음 추천' })).toBeVisible();
+  await expect(page.getByText('70%')).toBeVisible();
+  await expect(page.getByText('놀이터 — 미끄럼틀과 그네가 있는 곳')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test('작은 모험 5문제가 기본이고 15문제 긴 모험도 고를 수 있다', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /수학 더하고/ }).click();
   await page.getByRole('button', { name: /^덧셈 / }).click();
-  await expect(page.getByRole('radio')).toHaveCount(4);
+  await expect(page.getByRole('radiogroup', { name: '단계' }).getByRole('radio')).toHaveCount(4);
   await expect(page.getByRole('radio', { name: /새싹/ })).toHaveCount(0);
-  await expect(page.getByRole('radio', { name: /5문제|10문제|20문제|빠르게|시간 제한 없음/ })).toHaveCount(0);
-  await expect(page.getByLabel('학습 규칙')).toContainText('15문제');
-  await expect(page.getByLabel('학습 규칙')).toContainText('30초');
-  await page.getByRole('button', { name: /시작할래요/ }).click();
-  await expect(page.getByText('1 / 15')).toBeVisible();
+  await expect(page.getByRole('radio', { name: /작은 모험/ })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('radio', { name: /더 길게 놀기/ })).toHaveAttribute('aria-checked', 'false');
+  await expect(page.getByLabel('놀이 안내')).toContainText('5개');
+  await expect(page.getByLabel('놀이 안내')).toContainText('30초');
+  await page.getByRole('button', { name: /작은 모험 시작/ }).click();
+  await expect(page.getByText('1 / 5')).toBeVisible();
   await expect(page.getByLabel(/남은 시간 30초/)).toBeVisible();
 });
 
+test('첫 언어 놀이는 한 번 탭 연습 뒤 5문제 무타이머로 시작한다', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => localStorage.removeItem('numbercal.language-warmup.v1'));
+  await page.getByRole('button', { name: /한국어 우리말/ }).click();
+  await page.getByRole('button', { name: /글자 채우기/ }).click();
+  await expect(page.getByRole('radio', { name: /그림친구/ })).toBeVisible();
+  await page.getByRole('radio', { name: /맛있는 친구/ }).click();
+  await page.getByRole('button', { name: /작은 모험 시작/ }).click();
+  await expect(page.getByRole('heading', { name: '그림을 톡 눌러 볼까요?' })).toBeVisible();
+  await page.getByRole('button', { name: /맛있는 친구 그림을 누르고/ }).click();
+  await expect(page.getByText('1 / 5')).toBeVisible();
+  await expect(page.locator('.timer-card')).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem('numbercal.language-warmup.v1'))).toBe('done');
+});
+
+test('말놀이 탐험에서 그림·소리·조립·문장 활동을 한 화면 흐름으로 만난다', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await installSpeechMock(page);
+  await start(page, /한국어 우리말/, /말놀이 탐험/);
+  const expectedActivities = ['그림 연결', '소리 찾기', '낱말 조립', '낱말 조립', '문장 완성'];
+  for (let index = 0; index < expectedActivities.length; index += 1) {
+    await expect(page.locator('.activity-guide').getByText(expectedActivities[index], { exact: true })).toBeVisible();
+    await expect(page.locator('.timer-card')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    if (index === 0) await expect(page.locator('.activity-option-picture').first()).toBeVisible();
+    if (await page.locator('.tile-build-board').count()) {
+      const tileCount = await page.locator('.tile-slot').count();
+      if (index === 2) {
+        await page.getByRole('button', { name: '힌트 보기' }).click();
+        await expect(page.locator('.tile-hint')).toBeVisible();
+      }
+      for (let tileIndex = 0; tileIndex < tileCount; tileIndex += 1) {
+        await page.locator('.word-tile:not([disabled])').first().click();
+      }
+      await page.getByRole('button', { name: '완성했어요' }).click();
+      if (index === 2) {
+        await expect.poll(async () => page.evaluate(() => {
+          const stored = JSON.parse(localStorage.getItem('numbercal.skill-mastery.v2') ?? 'null');
+          return stored?.entries?.some((entry: { hintRate: number }) => entry.hintRate > 0) ?? false;
+        })).toBe(true);
+      }
+    } else {
+      await page.locator('.activity-option:not([disabled])').first().click();
+    }
+    await page.getByRole('button', { name: index === 4 ? '오늘 찾은 것 보기' : '다음 친구' }).click();
+  }
+  await expect(page.locator('.result-screen')).toBeVisible();
+});
+
+test('처음 만나는 언어 활동은 모리의 정답 시범 뒤 시작한다', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => localStorage.setItem('numbercal.language-warmup.v1', 'done'));
+  await page.getByRole('button', { name: /한국어 우리말/ }).click();
+  await page.getByRole('button', { name: /말놀이 탐험/ }).click();
+  await page.getByRole('button', { name: /작은 모험 시작/ }).click();
+  await expect(page.getByLabel('그림 연결 연습')).toContainText('모리가 먼저 보여줄게요!');
+  await page.getByRole('button', { name: '이제 내가 해볼래요' }).click();
+  await expect(page.locator('.activity-guide').getByText('그림 연결', { exact: true })).toBeVisible();
+});
+
+test('쓰기모험의 Word Quest도 키보드 없이 네 개의 터치 보기로 시작한다', async ({ page }) => {
+  await start(page, /영어 영어 단어/, /Word Quest/, /쓰기모험/);
+  await expect(page.locator('.answer-form')).toHaveCount(0);
+  await expect(page.locator('.activity-option')).toHaveCount(4);
+});
+test('Word Quest의 소리가 실패해도 터치 글자 문제 뒤 탐험을 계속한다', async ({ page }) => {
+  await page.addInitScript(() => {
+    class MockUtterance { constructor(public text: string) {} }
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', { value: MockUtterance, configurable: true });
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: { getVoices: () => [], addEventListener: () => undefined, cancel: () => undefined, speak: () => { throw new Error('speech unavailable'); } }
+    });
+  });
+  await start(page, /영어 영어 단어/, /Word Quest/, /쓰기모험/);
+  await page.locator('.activity-option:not([disabled])').first().click();
+  await page.getByRole('button', { name: '다음 친구' }).click();
+  await page.getByRole('button', { name: '글자 문제로 바꾸기' }).click();
+  await expect(page.locator('.answer-form')).toHaveCount(0);
+  await expect(page.locator('.option-button')).toHaveCount(4);
+  await page.locator('.option-button:not([disabled])').first().click();
+  await page.getByRole('button', { name: '다음 친구' }).click();
+  await expect(page.locator('.activity-guide').getByText('낱말 조립', { exact: true })).toBeVisible();
+});
 test('수학 사칙연산 탭에서 혼합 문제가 출제된다', async ({ page }) => {
   await start(page, /수학 더하고/, /사칙연산/);
   await expect(page.locator('.question-card h1')).toHaveText(/^\d+( [＋+−×] \d+)+ = \?$/);
   await expect(page.locator('.option-button')).toHaveCount(3);
 });
 
-test('수학 쉬움 15문제를 풀고 결과의 오답 복습과 저장 기록까지 간다', async ({ page }) => {
+test('수학 쉬움 5문제를 풀고 결과의 오답 복습과 저장 기록까지 간다', async ({ page }) => {
   await start(page, /수학 더하고/, /^덧셈 /);
   let reviewPrompt = '';
   let selectedWrongAnswer = '';
@@ -87,22 +223,53 @@ test('수학 쉬움 15문제를 풀고 결과의 오답 복습과 저장 기록�
     } else {
       await page.getByRole('button', { name: String(answer), exact: true }).click();
     }
-    await page.getByRole('button', { name: index === SESSION_LENGTH - 1 ? '결과 보기' : '다음 문제' }).click();
+    await page.getByRole('button', { name: index === SESSION_LENGTH - 1 ? '오늘 찾은 것 보기' : '다음 친구' }).click();
     if (index < SESSION_LENGTH - 1) {
       await expect(page.getByText(`${index + 2} / ${SESSION_LENGTH}`)).toBeVisible({ timeout: 3000 });
     }
   }
-  await expect(page.getByRole('heading', { name: '14 / 15' })).toBeVisible({ timeout: 3000 });
+  await expect(page.getByRole('heading', { name: '4 / 5' })).toBeVisible({ timeout: 3000 });
   await expect(page.locator('.review-card')).toHaveCount(1);
   const reviewCard = page.locator('.review-card').first();
   await expect(reviewCard).toContainText(reviewPrompt);
   await expect(reviewCard).toContainText(selectedWrongAnswer);
   await expect(reviewCard).toContainText(reviewCorrectAnswer);
-  await expect(reviewCard.getByText('다시 볼 문제')).toBeVisible();
+  await expect(reviewCard.getByText('다시 만난 친구')).toBeVisible();
   const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('numbercal.history.v1') ?? '{}'));
-  expect(stored.sessions[0].totalCount).toBe(15);
+  expect(stored.sessions[0].totalCount).toBe(5);
   expect(stored.sessions[0].incorrectCount).toBe(1);
   expect(stored.sessions[0].reviewItems).toBeUndefined();
+});
+
+test('영어 오답은 세 문제 간격 뒤 다시 나오고 숙련도에 저장된다', async ({ page }) => {
+  await start(page, /영어 영어 단어/, /철자 채우기/, /쓰기모험/);
+  await page.getByLabel('내 정답').fill('zzz');
+  await page.getByRole('button', { name: '정답 확인' }).click();
+  const reviewWord = (await page.locator('.feedback-panel b').innerText()).trim();
+  let stored = await page.evaluate(() => JSON.parse(localStorage.getItem('numbercal.language-mastery.v1') ?? '{}'));
+  expect(stored.entries[0].stage).toBe('review');
+  const skillStored = await page.evaluate(() => JSON.parse(localStorage.getItem('numbercal.skill-mastery.v2') ?? '{}'));
+  expect(skillStored.schemaVersion).toBe(2);
+  expect(skillStored.entries.length).toBeGreaterThan(0);
+  const reviewWordId = stored.entries[0].wordId;
+
+  for (let index = 0; index < 2; index += 1) {
+    await page.getByRole('button', { name: '다음 친구' }).click();
+    await page.getByLabel('내 정답').fill('zzz');
+    await page.getByRole('button', { name: '정답 확인' }).click();
+  }
+  await page.getByRole('button', { name: '다음 친구' }).click();
+  await expect(page.getByText('4 / 5')).toBeVisible();
+  const prompt = await page.locator('.question-card h1').innerText();
+  const startIndex = Array.from(prompt).indexOf('□');
+  const missingLength = Array.from(prompt).filter((letter) => letter === '□').length;
+  const missing = Array.from(reviewWord).slice(startIndex, startIndex + missingLength).join('');
+  await page.getByLabel('내 정답').fill(missing);
+  await page.getByRole('button', { name: '정답 확인' }).click();
+  await expect(page.locator('.feedback-correct')).toBeVisible();
+  stored = await page.evaluate(() => JSON.parse(localStorage.getItem('numbercal.language-mastery.v1') ?? '{}'));
+  const reviewed = stored.entries.find((entry: { wordId: string }) => entry.wordId === reviewWordId);
+  expect(reviewed).toMatchObject({ stage: 'learning', correctCount: 1, correctStreak: 1 });
 });
 
 test('도전 수학은 보기 없이 숫자를 직접 입력해 정답을 맞힌다', async ({ page }) => {
@@ -120,7 +287,7 @@ for (const scenario of [
   { name: '영어', subject: /영어 영어 단어/, mode: /철자 채우기/ }
 ]) {
   test(`도전 ${scenario.name}는 보기 없이 글자를 직접 입력한다`, async ({ page }) => {
-    await start(page, scenario.subject, scenario.mode, /도전 초4/);
+    await start(page, scenario.subject, scenario.mode, /쓰기모험/);
     await expect(page.locator('.option-button')).toHaveCount(0);
     await expect(page.getByLabel('내 정답')).toBeVisible();
     await page.getByLabel('내 정답').fill('테스트');
@@ -132,7 +299,7 @@ for (const scenario of [
 test('듣기와 다시 듣기가 중첩 없이 동작한다', async ({ page }) => {
   await installSpeechMock(page);
   await start(page, /한국어 우리말/, /듣고 고르기/);
-  const replay = page.getByRole('button', { name: '다시 듣기' });
+  const replay = page.getByRole('button', { name: '다시 듣기', exact: true });
   await expect(replay).toBeEnabled({ timeout: 3000 });
   await replay.evaluate((button) => {
     for (let index = 0; index < 5; index += 1) (button as HTMLButtonElement).click();
@@ -140,6 +307,22 @@ test('듣기와 다시 듣기가 중첩 없이 동작한다', async ({ page }) =
   await expect(replay).toBeEnabled({ timeout: 3000 });
   const spokenCount = await page.evaluate(() => (window as Window & { __spokenForTest: string[] }).__spokenForTest.length);
   expect(spokenCount).toBe(2);
+});
+
+test('설정한 읽기 속도와 느리게 다시 듣기가 한국어·영어 듣기에 적용된다', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await installSpeechMock(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: '설정 열기' }).click();
+  await page.getByRole('radio', { name: /또박또박/ }).click();
+  await expect(page.getByRole('radio', { name: /또박또박/ })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('button', { name: '뒤로 가기' }).click();
+  await start(page, /영어 영어 단어/, /듣고 고르기/);
+  await expect(page.getByRole('button', { name: '느리게 다시 듣기' })).toBeEnabled({ timeout: 3000 });
+  await expect.poll(() => page.evaluate(() => (window as Window & { __speechRatesForTest: number[] }).__speechRatesForTest.at(-1))).toBe(0.95);
+  await page.getByRole('button', { name: '느리게 다시 듣기' }).click();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __speechRatesForTest: number[] }).__speechRatesForTest.at(-1))).toBe(0.75);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
 test('TTS 호출이 예외를 내도 글자 문제로 안전하게 전환한다', async ({ page }) => {
@@ -162,23 +345,23 @@ test('서로 다른 보기를 연속 클릭해도 한 문제만 처리한다', a
   await page.locator('.option-button:not([disabled])').first().waitFor();
   await page.locator('.option-button').evaluateAll((buttons) => buttons.forEach((button) => (button as HTMLButtonElement).click()));
   await expect(page.locator('.feedback-panel')).toBeVisible();
-  await page.getByRole('button', { name: '다음 문제' }).click();
-  await expect(page.getByText('2 / 15')).toBeVisible({ timeout: 3000 });
+  await page.getByRole('button', { name: '다음 친구' }).click();
+  await expect(page.getByText('2 / 5')).toBeVisible({ timeout: 3000 });
 });
 
-test('정답 공개는 5초 동안 유지되고 다음 문제 버튼으로 바로 넘길 수 있다', async ({ page }) => {
+test('정답 공개는 5초 동안 유지되고 다음 친구 버튼으로 바로 넘길 수 있다', async ({ page }) => {
   await start(page, /수학 더하고/, /^덧셈 /);
   await page.locator('.option-button:not([disabled])').first().click();
   await expect(page.locator('.feedback-panel')).toBeVisible();
-  await expect(page.getByText('1 / 15')).toBeVisible();
+  await expect(page.getByText('1 / 5')).toBeVisible();
   await expect(page.getByText('5초 뒤 자동으로 넘어가요.')).toBeVisible();
 
   await page.waitForTimeout(4200);
   await expect(page.locator('.feedback-panel')).toBeVisible();
-  await expect(page.getByText('1 / 15')).toBeVisible();
+  await expect(page.getByText('1 / 5')).toBeVisible();
 
-  await page.getByRole('button', { name: '다음 문제' }).click();
-  await expect(page.getByText('2 / 15')).toBeVisible({ timeout: 1000 });
+  await page.getByRole('button', { name: '다음 친구' }).click();
+  await expect(page.getByText('2 / 5')).toBeVisible({ timeout: 1000 });
 });
 
 test('설정 유지, 새로고침 복구, 동작 줄이기가 안전하게 동작한다', async ({ page }) => {
@@ -192,14 +375,14 @@ test('설정 유지, 새로고침 복구, 동작 줄이기가 안전하게 동�
   await page.getByRole('button', { name: '뒤로 가기' }).click();
   await page.getByRole('button', { name: /수학 더하고/ }).click();
   await page.getByRole('button', { name: /^덧셈 / }).click();
-  await page.getByRole('button', { name: /시작할래요/ }).click();
+  await page.getByRole('button', { name: /작은 모험 시작/ }).click();
   await page.reload();
   await expect(page.getByRole('heading', { name: '어린이 학습 놀이터' })).toBeVisible();
 });
 
 test('320×568 화면에서 도전 입력 UI가 가로로 넘치지 않는다', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
-  await start(page, /영어 영어 단어/, /철자 채우기/, /도전 초4/);
+  await start(page, /영어 영어 단어/, /철자 채우기/, /쓰기모험/);
   await expect(page.getByLabel('내 정답')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
 });

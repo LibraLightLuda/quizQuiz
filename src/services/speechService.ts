@@ -24,14 +24,18 @@ export const cancelSpeech = (): void => {
   }
 };
 
-export const speak = (text: string, lang: 'ko-KR' | 'en-US'): Promise<'ended' | 'error' | 'timeout'> => {
+export const speak = (
+  text: string,
+  lang: 'ko-KR' | 'en-US',
+  rate: 0.75 | 0.85 | 0.95 = 0.85
+): Promise<'ended' | 'error' | 'timeout'> => {
   if (!speechSupported()) return Promise.resolve('error');
   cancelSpeech();
 
   return new Promise((resolve) => {
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = lang;
-    utterance.rate = lang === 'ko-KR' ? 0.9 : 0.85;
+    utterance.rate = rate;
     utterance.pitch = 1;
     utterance.volume = 0.9;
     const exact = voices.find((voice) => voice.lang.toLowerCase() === lang.toLowerCase());

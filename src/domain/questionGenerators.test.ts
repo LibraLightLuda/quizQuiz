@@ -132,4 +132,32 @@ describe('언어 문제 생성기', () => {
       });
     }
   }
+
+  it('세션 복습 대상으로 지정한 단어를 우선 출제한다', () => {
+    const question = generateLanguageQuestion({
+      mode: 'en-fill', difficulty: 'easy', recentSignatures: [], random: new SeededRandom(17),
+      preferredWordIds: ['en-easy-1']
+    });
+    expect(question.metadata?.wordId).toBe('en-easy-1');
+    expect(question.metadata?.selectionReason).toBe('session-review');
+    expect(question.metadata?.phonicsSkills).toEqual(englishWords[0].phonicsSkills);
+  });
+
+  it('선택한 테마의 단어를 작은 모험에 우선 사용한다', () => {
+    const question = generateLanguageQuestion({
+      mode: 'en-fill', difficulty: 'easy', recentSignatures: [], random: new SeededRandom(71),
+      theme: 'animals', lessonPhase: 'discover'
+    });
+    const word = englishWords.find((item) => item.id === question.metadata?.wordId)!;
+    expect(word.category).toBe('animal');
+    expect(question.metadata?.lessonPhase).toBe('discover');
+  });
+  it('발견 구간에서는 이번 모험의 목표 기술을 가진 단어를 고른다', () => {
+    const question = generateLanguageQuestion({
+      mode: 'en-fill', difficulty: 'easy', recentSignatures: [], random: new SeededRandom(81),
+      lessonPhase: 'discover', targetSkillIds: ['en-cvc']
+    });
+    expect(question.metadata?.skillIds).toContain('en-cvc');
+    expect(question.metadata?.evidenceSkillIds).toEqual(['en-cvc']);
+  });
 });

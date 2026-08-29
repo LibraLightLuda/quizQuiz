@@ -12,7 +12,7 @@ export type AppAction =
   | { type: 'UPDATE_CONFIG'; patch: Partial<SessionConfig> }
   | { type: 'UPDATE_SETTINGS'; settings: Settings }
   | { type: 'CLEAR_HISTORY' }
-  | { type: 'START_SESSION'; question: Question; config: SessionConfig }
+  | { type: 'START_SESSION'; question: Question; config: SessionConfig; targetSkillIds?: string[] }
   | { type: 'REPLACE_QUESTION'; questionId: string; question: Question; config: SessionConfig }
   | { type: 'READY'; questionId: string; now: number }
   | { type: 'RESOLVE'; questionId: string; optionId: string | null; selectedAnswer?: string; now: number; deadlineExpired?: boolean; praise: string; gentle: string }
@@ -51,12 +51,20 @@ const resolve = (state: AppState, action: Extract<AppAction, { type: 'RESOLVE' }
   const feedbackText = timedOut ? '시간이 다 되었어요. 정답을 같이 볼까요?' : correct ? `${action.praise}${special}` : action.gentle;
   const correctOption = session.currentQuestion.options.find((option) => option.id === session.currentQuestion.correctOptionId);
   const selectedOption = session.currentQuestion.options.find((option) => option.id === action.optionId);
-  const reviewItems: ReviewItem[] = !correct && session.config.subject === 'math'
+  const wordId = typeof session.currentQuestion.metadata?.wordId === 'string'
+    ? session.currentQuestion.metadata.wordId
+    : undefined;
+  const reviewItems: ReviewItem[] = !correct
     ? [...session.reviewItems, {
       questionId: session.currentQuestion.id,
+      questionIndex: session.questionIndex,
+      subject: session.config.subject,
+      ...(wordId ? { wordId } : {}),
       prompt: session.currentQuestion.prompt,
       selectedAnswer: timedOut ? null : action.selectedAnswer ?? selectedOption?.label ?? null,
-      correctAnswer: correctOption?.label ?? session.currentQuestion.explanation,
+      correctAnswer: session.config.subject === 'math'
+        ? correctOption?.label ?? session.currentQuestion.explanation
+        : session.currentQuestion.explanation,
       explanation: session.currentQuestion.explanation,
       resolution: timedOut ? 'timeout' : 'incorrect'
     }]
@@ -96,7 +104,9 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       session: {
         id: createId('session'), config: action.config, questionIndex: 0, currentQuestion: action.question,
         questionStatus: 'presenting', answers: [], reviewItems: [], recentSignatures: [action.question.signature], recentAnswers: [],
-        recentCorrectIndices: [],
+        recentCorrectIndices: [], reviewedWordIds: [],
+        encounteredWords: action.config.subject === 'math' ? [] : [action.question.explanation],
+        targetSkillIds: action.targetSkillIds ?? [],
         streak: 0, selectedOptionId: null, resolution: null, feedbackText: '', startedAt: null, elapsedMs: 0,
         deadline: null, limitMs: null, remainingMs: null, paused: false
       }
@@ -119,6 +129,9 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       const session = state.session;
       if (!session || session.questionStatus !== 'presenting' || session.currentQuestion.id !== action.questionId) return state;
       if (session.paused) return state;
+      if (session.config.subject !== 'math') {
+        return { ...state, session: { ...session, questionStatus: 'answering', startedAt: action.now, elapsedMs: 0, limitMs: null, remainingMs: null, deadline: null } };
+      }
       return { ...state, session: { ...session, questionStatus: 'answering', startedAt: action.now, elapsedMs: 0, limitMs: QUESTION_TIME_MS, remainingMs: QUESTION_TIME_MS, deadline: action.now + QUESTION_TIME_MS } };
     }
     case 'RESOLVE': return resolve(state, action);
@@ -133,6 +146,10 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
       const previousCorrectIndex = session.currentQuestion.options.findIndex(
         (option) => option.id === session.currentQuestion.correctOptionId
       );
+      const reviewedWordId = session.currentQuestion.metadata?.selectionReason === 'session-review'
+        && typeof session.currentQuestion.metadata.wordId === 'string'
+        ? session.currentQuestion.metadata.wordId
+        : null;
       return {
         ...state,
         session: {
@@ -141,7 +158,13 @@ export const appReducer = (state: AppState, action: AppAction): AppState => {
           deadline: null, limitMs: null, remainingMs: null, paused: false,
           recentSignatures: [...session.recentSignatures, action.nextQuestion.signature].slice(-8),
           recentAnswers: Number.isFinite(previousAnswer) ? [...session.recentAnswers, previousAnswer].slice(-2) : session.recentAnswers,
-          recentCorrectIndices: [...session.recentCorrectIndices, previousCorrectIndex].slice(-2)
+          recentCorrectIndices: [...session.recentCorrectIndices, previousCorrectIndex].slice(-2),
+          reviewedWordIds: reviewedWordId
+            ? [...new Set([...session.reviewedWordIds, reviewedWordId])]
+            : session.reviewedWordIds,
+          encounteredWords: action.nextQuestion.subject === 'math'
+            ? session.encounteredWords
+            : [...new Set([...session.encounteredWords, action.nextQuestion.explanation])]
         }
       };
     }

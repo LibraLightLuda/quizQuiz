@@ -6,6 +6,9 @@ export interface StoryScene {
   illustration: string;
   text: string;
   alt: string;
+  vocabularyIds: string[];
+  skillIds: string[];
+  sentenceLevel: 0 | 1 | 2 | 3;
 }
 
 export interface StoryOption {
@@ -69,7 +72,7 @@ export interface StoryProgress {
   id: string;
   storyId: string;
   level: StoryLevel;
-  screen: 'reading' | 'activity';
+  screen: 'reading' | 'activity' | 'recall';
   pageIndex: number;
   activityIndex: number;
   activities: StoryActivityState[];
@@ -78,6 +81,16 @@ export interface StoryProgress {
   daily: boolean;
   dateKey?: string;
   reviewActivityId?: string;
+  missionVocabularyIds?: string[];
+  missionRecallIndex?: number;
+  missionRecallCorrect?: number;
+  missionRecallSelectedWordId?: string;
+  missionRecallComplete?: boolean;
+}
+
+export interface StoryVocabularyMission {
+  storyId: string;
+  vocabularyIds: string[];
 }
 
 export interface StoryRecord {
@@ -108,4 +121,6 @@ export interface StoryResult {
   improved: boolean;
   strengthMessage: string;
   practiceMessage: string;
+  missionVocabularyIds?: string[];
+  missionRecallCorrect?: number;
 }

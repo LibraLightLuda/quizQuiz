@@ -25,6 +25,18 @@ describe('이야기 탐험대 저장소', () => {
     expect(loadStoryProgress()).toBeNull();
   });
 
+  it('이야기 낱말 회상 위치와 점수를 저장하고 복구한다', () => {
+    const story = storiesByLevel('sprout').find((item) => item.id === 'sprout-lost-mitten')!;
+    const missionWords = [...new Set(story.scenes.flatMap((scene) => scene.vocabularyIds))].slice(0, 2);
+    const progress = createStoryProgress(story, true, '2026-08-29', new SeededRandom(8), missionWords);
+    progress.screen = 'recall';
+    progress.missionRecallIndex = 1;
+    progress.missionRecallCorrect = 1;
+    progress.missionRecallSelectedWordId = missionWords[1];
+    expect(saveStoryProgress(progress)).toBe(true);
+    expect(loadStoryProgress()).toEqual(progress);
+  });
+
   it('완료 기록과 일일 배지를 누적한다', () => {
     const story = storiesByLevel('sprout')[0];
     const progress = createStoryProgress(story, true, '2026-08-21', new SeededRandom(5));

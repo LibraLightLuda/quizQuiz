@@ -1,26 +1,35 @@
 import { DEFAULT_CONFIG } from '../domain/difficulty';
-import type { Settings, StoredHistory, SessionSummary, SessionConfig, Mode, Subject } from '../domain/types';
+import type { Settings, StoredHistory, SessionSummary, SessionConfig, Mode, Subject, SessionLength, LearningTheme, SpeechRate } from '../domain/types';
 
 const SETTINGS_KEY = 'numbercal.settings.v1';
-const HISTORY_KEY = 'numbercal.history.v1';
-const GAME_RECORD_KEYS = [
+export const LEARNING_RECORD_KEYS = [
+  'numbercal.history.v1',
+  'numbercal.language-mastery.v1',
+  'numbercal.skill-mastery.v2',
   'numbercal.sudoku.records.v1',
   'numbercal.memory.records.v1',
   'numbercal.story.records.v1',
   'numbercal.balance.records.v1',
   'numbercal.number-path.records.v1'
 ] as const;
+export type LearningRecordKey = typeof LEARNING_RECORD_KEYS[number];
+const HISTORY_KEY: LearningRecordKey = LEARNING_RECORD_KEYS[0];
+const GAME_RECORD_KEYS = LEARNING_RECORD_KEYS.slice(1);
 
 export const DEFAULT_SETTINGS: Settings = {
   schemaVersion: 1,
   sound: true,
   tts: true,
+  speechRate: 0.85,
   animations: true,
   lastConfig: DEFAULT_CONFIG
 };
 
 const subjects: Subject[] = ['math', 'korean', 'english'];
-const modes: Mode[] = ['math-add', 'math-subtract', 'math-multiply', 'math-mixed', 'ko-fill', 'ko-listen', 'en-fill', 'en-listen'];
+const modes: Mode[] = ['math-add', 'math-subtract', 'math-multiply', 'math-mixed', 'ko-fill', 'ko-listen', 'ko-adventure', 'en-fill', 'en-listen', 'en-adventure'];
+const sessionLengths: SessionLength[] = [5, 15];
+const learningThemes: LearningTheme[] = ['animals', 'food', 'nature'];
+const speechRates: SpeechRate[] = [0.75, 0.85, 0.95];
 
 const modeMatchesSubject = (mode: Mode, subject: Subject): boolean =>
   (subject === 'math' && mode.startsWith('math-'))
@@ -38,7 +47,9 @@ const normalizeConfig = (value: unknown): SessionConfig | null => {
   return {
     subject: config.subject as Subject,
     mode: config.mode as Mode,
-    difficulty: difficulty === 'sprout' ? 'easy' : difficulty as SessionConfig['difficulty']
+    difficulty: difficulty === 'sprout' ? 'easy' : difficulty as SessionConfig['difficulty'],
+    length: sessionLengths.includes(config.length as SessionLength) ? config.length as SessionLength : 5,
+    theme: learningThemes.includes(config.theme as LearningTheme) ? config.theme as LearningTheme : 'animals'
   };
 };
 
@@ -58,7 +69,9 @@ const isSummary = (value: unknown): value is SessionSummary => {
   if (summary.totalCount < 1 || summary.correctCount + summary.incorrectCount + summary.timeoutCount !== summary.totalCount) return false;
   return typeof summary.averageResponseMs === 'number'
     && Number.isFinite(summary.averageResponseMs)
-    && summary.averageResponseMs >= 0;
+    && summary.averageResponseMs >= 0
+    && (summary.discoveredWords === undefined
+      || (Array.isArray(summary.discoveredWords) && summary.discoveredWords.every((word) => typeof word === 'string')));
 };
 
 export const loadSettings = (): Settings => {
@@ -69,6 +82,7 @@ export const loadSettings = (): Settings => {
       schemaVersion: 1,
       sound: typeof parsed.sound === 'boolean' ? parsed.sound : true,
       tts: typeof parsed.tts === 'boolean' ? parsed.tts : true,
+      speechRate: speechRates.includes(parsed.speechRate as SpeechRate) ? parsed.speechRate as SpeechRate : 0.85,
       animations: typeof parsed.animations === 'boolean' ? parsed.animations : true,
       lastConfig: normalizeConfig(parsed.lastConfig) ?? DEFAULT_CONFIG
     };

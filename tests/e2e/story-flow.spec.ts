@@ -38,7 +38,9 @@ const installSpeechMock = async (page: Page) => {
       constructor(text: string) { this.text = text; }
     }
     const spoken: string[] = [];
+    const rates: number[] = [];
     Object.defineProperty(window, '__storySpokenForTest', { value: spoken, configurable: true });
+    Object.defineProperty(window, '__storySpeechRatesForTest', { value: rates, configurable: true });
     Object.defineProperty(window, 'SpeechSynthesisUtterance', { value: MockUtterance, configurable: true });
     Object.defineProperty(window, 'speechSynthesis', {
       configurable: true,
@@ -46,6 +48,7 @@ const installSpeechMock = async (page: Page) => {
         getVoices: () => [], addEventListener: () => undefined, cancel: () => undefined,
         speak: (utterance: MockUtterance) => {
           spoken.push(utterance.text);
+          rates.push(utterance.rate);
           window.setTimeout(() => utterance.onend?.(), 20);
         }
       }
@@ -56,6 +59,50 @@ const installSpeechMock = async (page: Page) => {
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
   await page.evaluate(() => localStorage.clear());
+});
+
+test('최근 배운 낱말이 오늘의 이야기 미션과 장면에서 다시 등장한다', async ({ page }) => {
+  await page.evaluate(() => {
+    const now = new Date().toISOString();
+    const entries = ['ko-easy-1', 'ko-easy-31'].map((wordId) => ({
+      key: `ko-adventure:${wordId}`, wordId, mode: 'ko-adventure', stage: 'learning',
+      attempts: 1, correctCount: 1, correctStreak: 1, averageResponseMs: 1200,
+      lastSeenAt: now, nextReviewAt: now
+    }));
+    localStorage.setItem('numbercal.language-mastery.v1', JSON.stringify({ schemaVersion: 1, entries }));
+  });
+  await page.reload();
+  await page.getByRole('button', { name: /이야기 탐험대 읽고/ }).click();
+  const mission = page.getByRole('button', { name: /오늘의 낱말 미션.*빨간 장갑 한 짝/ });
+  await expect(mission).toContainText('놀이터 · 장갑');
+  await mission.click();
+  const independentBefore = await page.evaluate(() => {
+    const stored = JSON.parse(localStorage.getItem('numbercal.skill-mastery.v2') ?? 'null');
+    return stored.entries.reduce((sum: number, entry: { independentCorrect: number }) => sum + entry.independentCorrect, 0);
+  });
+  await expect(page.locator('.story-mission-found')).toContainText('놀이터 · 장갑');
+  await page.getByRole('button', { name: '다음 장면' }).click();
+  await page.getByRole('button', { name: '다음 장면' }).click();
+  await page.getByRole('button', { name: '활동 시작' }).click();
+  await page.getByRole('button', { name: '미끄럼틀 아래' }).click();
+  await page.getByRole('button', { name: '다음 활동' }).click();
+  await arrangeSequence(page, [
+    '유나는 놀이터에서 빨간 장갑 한 짝을 잃어버렸어요.',
+    '유나는 미끄럼틀 아래를 자세히 살펴보았어요.',
+    '장갑을 찾은 유나는 활짝 웃었어요.'
+  ]);
+  await page.getByRole('button', { name: '다음 활동' }).click();
+  await page.getByRole('button', { name: '장갑을 찾아서' }).click();
+  await page.getByRole('button', { name: '낱말 떠올리기' }).click();
+  await expect(page.getByRole('heading', { name: '1 / 2' })).toBeVisible();
+  await page.getByRole('button', { name: '놀이터', exact: true }).click();
+  await page.getByRole('button', { name: '다음 낱말' }).click();
+  await page.getByRole('button', { name: '장갑', exact: true }).click();
+  await page.getByRole('button', { name: '결과 보기' }).click();
+  await expect(page.locator('.story-mission-result')).toContainText('도움 없이 다시 기억한 낱말 2 / 2');
+  const skills = await page.evaluate(() => JSON.parse(localStorage.getItem('numbercal.skill-mastery.v2') ?? 'null'));
+  expect(skills.entries.some((entry: { supportedCorrect: number }) => entry.supportedCorrect > 0)).toBe(true);
+  expect(skills.entries.reduce((sum: number, entry: { independentCorrect: number }) => sum + entry.independentCorrect, 0)).toBe(independentBefore);
 });
 
 test('새싹 이야기를 읽고 세 활동과 결과까지 완료한다', async ({ page }) => {
@@ -255,6 +302,8 @@ test('이야기 장면과 활동 문제를 음성으로 들을 수 있다', asyn
   await page.locator('.story-picks').getByRole('button', { name: /비 오는 날의 우산/ }).click();
   await page.getByRole('button', { name: '이 장면 읽어 주기' }).click();
   await expect.poll(() => page.evaluate(() => (window as Window & { __storySpokenForTest: string[] }).__storySpokenForTest.at(-1))).toBe('하늘에 먹구름이 모였어요.');
+  await page.getByRole('button', { name: '느리게 읽기' }).click();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __storySpeechRatesForTest: number[] }).__storySpeechRatesForTest.at(-1))).toBe(0.75);
   await page.getByRole('button', { name: '다음 장면' }).click();
   await page.getByRole('button', { name: '다음 장면' }).click();
   await page.getByRole('button', { name: '활동 시작' }).click();

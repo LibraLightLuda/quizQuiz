@@ -11,6 +11,16 @@ describe('이야기 탐험대 콘텐츠', () => {
     expect(validateStories()).toEqual([]);
   });
 
+  it('장면에 낱말·기술·문장 수준 태그를 연결한다', () => {
+    const taggedScenes = stories.flatMap((story) => story.scenes).filter((scene) => scene.vocabularyIds.length > 0);
+    expect(taggedScenes.length).toBeGreaterThan(20);
+    taggedScenes.forEach((scene) => {
+      expect(scene.skillIds.length).toBeGreaterThan(0);
+      expect(scene.sentenceLevel).toBeGreaterThanOrEqual(0);
+      expect(scene.sentenceLevel).toBeLessThanOrEqual(3);
+    });
+  });
+
   it('생각왕의 마지막 선택 활동은 근거 찾기를 요구한다', () => {
     storiesByLevel('thinker').forEach((story) => {
       const finalActivity = story.activities[2];

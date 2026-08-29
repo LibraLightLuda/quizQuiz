@@ -24,12 +24,13 @@ interface MemoryModeProps {
   onExit: () => void;
   soundEnabled: boolean;
   animationsEnabled: boolean;
+  onLanguagePairMatched?: (wordId: string, skillIds: readonly string[]) => void;
 }
 
 const categoryLabels = { math: '수', korean: '한', english: '영' } as const;
 const praiseMessages = ['멋진 연결이에요!', '기억력이 반짝!', '정확해요!', '아주 잘 찾았어요!'];
 
-function MemoryMode({ onExit, soundEnabled, animationsEnabled }: MemoryModeProps) {
+function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMatched }: MemoryModeProps) {
   const initialProgress = useMemo(() => loadMemoryProgress(), []);
   const [records, setRecords] = useState(() => loadMemoryRecords());
   const [savedProgress, setSavedProgress] = useState(initialProgress);
@@ -174,6 +175,7 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled }: MemoryModeProps
     setLocked(true);
 
     if (matched) {
+      if (first.wordId && first.skillIds?.length) onLanguagePairMatched?.(first.wordId, first.skillIds);
       const relation = `${first.content} ↔ ${second.content}`;
       setMessage(nextCombo >= 2 ? `${relation} · 연속 ${nextCombo}번 성공!` : `${relation} · ${praiseMessages[checked.correctAttempts % praiseMessages.length]}`);
       setCelebrate(true);

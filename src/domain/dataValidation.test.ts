@@ -34,6 +34,8 @@ describe('언어 데이터', () => {
     for (const word of englishWords) {
       expect(word.word).toMatch(/^[a-z]+$/);
       expect(word.meaningKo.trim()).not.toBe('');
+      expect(word.phonicsSkills.length).toBeGreaterThan(0);
+      word.phonicsSkills.forEach((skill) => expect(skill.trim()).not.toBe(''));
       for (const range of word.maskRanges) {
         expect(range.start + range.length).toBeLessThanOrEqual(word.word.length);
         expect(range.length).toBeLessThan(word.word.length);

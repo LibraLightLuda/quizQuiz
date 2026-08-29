@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS } from '../services/storageService';
 import { generateMathQuestion } from '../domain/mathGenerator';
 import { SeededRandom } from '../services/randomService';
 import { QUESTION_TIME_MS } from '../domain/difficulty';
+import { generateLanguageQuestion } from '../domain/languageGenerator';
 
 const makeQuestion = () => generateMathQuestion({ mode: 'math-add', difficulty: 'easy', recentSignatures: [], random: new SeededRandom(9) });
 
@@ -64,6 +65,24 @@ describe('학습 상태 reducer', () => {
     });
     expect(state.screen).toBe('result');
     expect(state.latestReview).toHaveLength(1);
+  });
+
+  it('언어 오답도 완성된 낱말과 함께 결과 복습용으로 보관한다', () => {
+    const question = generateLanguageQuestion({
+      mode: 'en-fill', difficulty: 'easy', recentSignatures: [], random: new SeededRandom(31)
+    });
+    const wrongOption = question.options.find((option) => option.id !== question.correctOptionId)!;
+    const config = { subject: 'english' as const, mode: 'en-fill' as const, difficulty: 'easy' as const, length: 5 as const, theme: 'animals' as const };
+    let state = createInitialState(DEFAULT_SETTINGS, []);
+    state = appReducer(state, { type: 'START_SESSION', question, config });
+    state = appReducer(state, { type: 'READY', questionId: question.id, now: 100 });
+    state = appReducer(state, {
+      type: 'RESOLVE', questionId: question.id, optionId: wrongOption.id, now: 200,
+      praise: '정답!', gentle: '괜찮아요!'
+    });
+    expect(state.session?.reviewItems).toEqual([expect.objectContaining({
+      subject: 'english', wordId: question.metadata?.wordId, correctAnswer: question.explanation
+    })]);
   });
 
   it('timeout이 먼저 확정되면 뒤따른 선택을 무시한다', () => {

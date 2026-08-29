@@ -7,6 +7,8 @@ export interface MemoryPair {
   left: string;
   right: string;
   category: MemoryCategory;
+  wordId?: string;
+  skillIds?: string[];
 }
 
 export interface MemoryCard {
@@ -15,6 +17,8 @@ export interface MemoryCard {
   content: string;
   category: MemoryCategory;
   side: 'question' | 'answer';
+  wordId?: string;
+  skillIds?: string[];
 }
 
 export interface MemoryProgress {

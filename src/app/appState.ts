@@ -1,9 +1,12 @@
-import type { AnswerRecord, Question, QuestionStatus, SessionConfig, SessionSummary, Settings } from '../domain/types';
+import type { AnswerRecord, Question, QuestionStatus, SessionConfig, SessionSummary, Settings, Subject } from '../domain/types';
 
 export type Screen = 'home' | 'mode' | 'setup' | 'session' | 'result' | 'settings';
 
 export interface ReviewItem {
   questionId: string;
+  questionIndex: number;
+  subject: Subject;
+  wordId?: string;
   prompt: string;
   selectedAnswer: string | null;
   correctAnswer: string;
@@ -22,6 +25,9 @@ export interface ActiveSession {
   recentSignatures: string[];
   recentAnswers: number[];
   recentCorrectIndices: number[];
+  reviewedWordIds: string[];
+  encounteredWords: string[];
+  targetSkillIds: string[];
   streak: number;
   selectedOptionId: string | null;
   resolution: AnswerRecord['resolution'] | null;

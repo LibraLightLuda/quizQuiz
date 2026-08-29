@@ -48,7 +48,7 @@ const isProgress = (value: unknown): value is StoryProgress => {
   const progress = value as Partial<StoryProgress>;
   const story = typeof progress.storyId === 'string' ? storyById(progress.storyId) : undefined;
   if (progress.schemaVersion !== 1 || !story || progress.level !== story.level
-    || !['reading', 'activity'].includes(progress.screen ?? '')
+    || !['reading', 'activity', 'recall'].includes(progress.screen ?? '')
     || !isNonNegativeInteger(progress.pageIndex) || progress.pageIndex! >= story.scenes.length
     || !isNonNegativeInteger(progress.activityIndex) || progress.activityIndex! >= story.activities.length
     || !Array.isArray(progress.activities) || progress.activities.length !== story.activities.length
@@ -57,6 +57,20 @@ const isProgress = (value: unknown): value is StoryProgress => {
     || typeof progress.elapsedMs !== 'number' || !Number.isFinite(progress.elapsedMs) || progress.elapsedMs < 0
     || typeof progress.updatedAt !== 'string' || Number.isNaN(Date.parse(progress.updatedAt))) return false;
   if (progress.daily && typeof progress.dateKey !== 'string') return false;
+  if (progress.missionVocabularyIds !== undefined && (
+    !Array.isArray(progress.missionVocabularyIds)
+    || progress.missionVocabularyIds.some((wordId) => typeof wordId !== 'string'
+      || !story.scenes.some((scene) => scene.vocabularyIds.includes(wordId)))
+  )) return false;
+  if (progress.missionVocabularyIds?.length) {
+    if (!isNonNegativeInteger(progress.missionRecallIndex)
+      || progress.missionRecallIndex! >= progress.missionVocabularyIds.length
+      || !isNonNegativeInteger(progress.missionRecallCorrect)
+      || progress.missionRecallCorrect! > progress.missionVocabularyIds.length
+      || typeof progress.missionRecallComplete !== 'boolean') return false;
+    if (progress.missionRecallSelectedWordId !== undefined
+      && !progress.missionVocabularyIds.includes(progress.missionRecallSelectedWordId)) return false;
+  } else if (progress.screen === 'recall') return false;
   return progress.reviewActivityId === undefined
     || story.activities.some((activity) => activity.id === progress.reviewActivityId);
 };
@@ -169,7 +183,13 @@ export const saveStoryCompletion = (
     earnedDailyBadge,
     improved,
     strengthMessage: storyStrengthMessage(progress.activities),
-    practiceMessage: storyPracticeMessage(progress.activities)
+    practiceMessage: storyPracticeMessage(progress.activities),
+    ...(progress.missionVocabularyIds?.length
+      ? { missionVocabularyIds: [...progress.missionVocabularyIds] }
+      : {}),
+    ...(progress.missionRecallCorrect !== undefined
+      ? { missionRecallCorrect: progress.missionRecallCorrect }
+      : {})
   };
   return { records: next, result, saved: storeRecords(next) };
 };
