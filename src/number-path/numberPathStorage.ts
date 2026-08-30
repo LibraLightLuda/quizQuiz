@@ -1,7 +1,9 @@
 import {
   NUMBER_PATH_DIFFICULTIES,
   NUMBER_PATH_SESSION_LENGTH,
+  nodeAfterPath,
   numberPathPuzzleSignature,
+  outgoingBridges,
   solutionIsUnique,
   validatePath
 } from './numberPathGenerator';
@@ -12,15 +14,18 @@ import type {
   NumberPathRecords
 } from './types';
 
-const PROGRESS_KEY = 'numbercal.number-path.progress.v1';
+const PROGRESS_KEY = 'numbercal.number-path.progress.v2';
+const LEGACY_PROGRESS_KEY = 'numbercal.number-path.progress.v1';
 const RECORDS_KEY = 'numbercal.number-path.records.v1';
 
 export const DEFAULT_NUMBER_PATH_RECORDS: NumberPathRecords = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   lastDifficulty: 'starter',
   completedSessions: 0,
   completedPuzzles: 0,
   totalBacktracks: 0,
+  totalBridgeFailures: 0,
+  totalRetries: 0,
   hintSessions: 0,
   byDifficulty: {},
   recentSignatures: [],
@@ -36,67 +41,80 @@ const isPuzzle = (value: unknown): value is NumberPathPuzzle => {
   if (!value || typeof value !== 'object') return false;
   const puzzle = value as Partial<NumberPathPuzzle>;
   if (typeof puzzle.id !== 'string' || !isDifficulty(puzzle.difficulty)
-    || !isCount(puzzle.rows) || !isCount(puzzle.columns) || !Array.isArray(puzzle.cells)
-    || typeof puzzle.startCellId !== 'string' || !Array.isArray(puzzle.checkpointCellIds)
-    || !puzzle.checkpointCellIds.every((id) => typeof id === 'string')
-    || !isCount(puzzle.requiredLength) || !Number.isInteger(puzzle.targetSum)
-    || !Array.isArray(puzzle.solutionPath) || !puzzle.solutionPath.every((id) => typeof id === 'string')) return false;
-  if (puzzle.endCellId !== undefined && typeof puzzle.endCellId !== 'string') return false;
-  if (puzzle.rows! < 2 || puzzle.columns! < 2 || puzzle.cells.length !== puzzle.rows! * puzzle.columns!) return false;
-  const ids = new Set<string>();
-  const coordinates = new Set<string>();
-  for (const cell of puzzle.cells) {
-    if (!cell || typeof cell.id !== 'string' || !isCount(cell.row) || !isCount(cell.column)
-      || !Number.isInteger(cell.value) || (cell.blocked !== undefined && typeof cell.blocked !== 'boolean')
-      || cell.row >= puzzle.rows! || cell.column >= puzzle.columns! || cell.id !== `r${cell.row}c${cell.column}`
-      || ids.has(cell.id) || coordinates.has(`${cell.row},${cell.column}`)) return false;
-    ids.add(cell.id);
-    coordinates.add(`${cell.row},${cell.column}`);
+    || !Array.isArray(puzzle.nodes) || !Array.isArray(puzzle.bridges)
+    || typeof puzzle.startNodeId !== 'string' || typeof puzzle.endNodeId !== 'string'
+    || !isCount(puzzle.requiredCrossings) || puzzle.requiredCrossings! < 4 || puzzle.requiredCrossings! > 7
+    || !Number.isInteger(puzzle.targetSum) || !Array.isArray(puzzle.requiredMarkerBridgeIds)
+    || !puzzle.requiredMarkerBridgeIds.every((id) => typeof id === 'string')
+    || !Array.isArray(puzzle.solutionBridgeIds)
+    || !puzzle.solutionBridgeIds.every((id) => typeof id === 'string')) return false;
+
+  const nodeIds = new Set<string>();
+  for (const node of puzzle.nodes) {
+    if (!node || typeof node.id !== 'string' || !isCount(node.layer) || !isCount(node.lane)
+      || !['start', 'junction', 'end'].includes(node.kind) || nodeIds.has(node.id)) return false;
+    nodeIds.add(node.id);
   }
-  if (!ids.has(puzzle.startCellId) || puzzle.solutionPath.length !== puzzle.requiredLength
-    || puzzle.solutionPath.some((id) => !ids.has(id))
-    || puzzle.checkpointCellIds.some((id) => !ids.has(id))
-    || (puzzle.endCellId && !ids.has(puzzle.endCellId))) return false;
+  if (!nodeIds.has(puzzle.startNodeId) || !nodeIds.has(puzzle.endNodeId)) return false;
+
+  const bridgeIds = new Set<string>();
+  const outgoingCounts = new Map<string, number>();
+  for (const bridge of puzzle.bridges) {
+    if (!bridge || typeof bridge.id !== 'string' || typeof bridge.fromNodeId !== 'string'
+      || typeof bridge.toNodeId !== 'string' || !Number.isInteger(bridge.value)
+      || (bridge.marker !== undefined && !['key', 'star'].includes(bridge.marker))
+      || (bridge.markerOrder !== undefined && ![1, 2].includes(bridge.markerOrder))
+      || bridgeIds.has(bridge.id) || !nodeIds.has(bridge.fromNodeId) || !nodeIds.has(bridge.toNodeId)) return false;
+    const from = puzzle.nodes.find((node) => node.id === bridge.fromNodeId)!;
+    const to = puzzle.nodes.find((node) => node.id === bridge.toNodeId)!;
+    if (to.layer !== from.layer + 1) return false;
+    bridgeIds.add(bridge.id);
+    outgoingCounts.set(bridge.fromNodeId, (outgoingCounts.get(bridge.fromNodeId) ?? 0) + 1);
+  }
+  if ([...outgoingCounts.values()].some((count) => count > 3)
+    || puzzle.solutionBridgeIds.length !== puzzle.requiredCrossings
+    || puzzle.solutionBridgeIds.some((id) => !bridgeIds.has(id))
+    || puzzle.requiredMarkerBridgeIds.some((id) => !bridgeIds.has(id))) return false;
   return solutionIsUnique(puzzle as NumberPathPuzzle)
-    && validatePath(puzzle as NumberPathPuzzle, puzzle.solutionPath).status === 'solved';
+    && validatePath(puzzle as NumberPathPuzzle, puzzle.solutionBridgeIds).status === 'solved';
 };
 
 const isProgress = (value: unknown): value is NumberPathProgress => {
   if (!value || typeof value !== 'object') return false;
   const progress = value as Partial<NumberPathProgress>;
-  if (progress.schemaVersion !== 1 || typeof progress.id !== 'string' || !isDifficulty(progress.difficulty)
+  if (progress.schemaVersion !== 2 || typeof progress.id !== 'string' || !isDifficulty(progress.difficulty)
     || !Array.isArray(progress.puzzles) || progress.puzzles.length !== NUMBER_PATH_SESSION_LENGTH
     || !progress.puzzles.every(isPuzzle) || !isCount(progress.puzzleIndex)
-    || progress.puzzleIndex! >= progress.puzzles.length || !Array.isArray(progress.selectedPath)
-    || !progress.selectedPath.every((id) => typeof id === 'string')
-    || !isCount(progress.completedCount) || !isCount(progress.checks) || !isCount(progress.backtracks)
+    || progress.puzzleIndex! >= progress.puzzles.length || typeof progress.currentNodeId !== 'string'
+    || !Array.isArray(progress.selectedBridgeIds) || !progress.selectedBridgeIds.every((id) => typeof id === 'string')
+    || !Array.isArray(progress.failedBridgeIds) || !progress.failedBridgeIds.every((id) => typeof id === 'string')
+    || !isCount(progress.lives) || progress.lives! > 3 || !isCount(progress.completedCount)
+    || !isCount(progress.backtracks) || !isCount(progress.bridgeFailures) || !isCount(progress.retries)
     || !isCount(progress.hintsUsed) || ![0, 1, 2].includes(progress.hintLevel ?? -1)
-    || !['selecting', 'solved'].includes(progress.phase ?? '') || typeof progress.daily !== 'boolean'
+    || !['selecting', 'rescue', 'solved'].includes(progress.phase ?? '') || typeof progress.daily !== 'boolean'
     || (progress.daily && typeof progress.dateKey !== 'string')
     || typeof progress.updatedAt !== 'string' || Number.isNaN(Date.parse(progress.updatedAt))) return false;
+
   const puzzle = progress.puzzles[progress.puzzleIndex!];
-  if (progress.puzzles.some((item) => item.difficulty !== progress.difficulty)) return false;
-  if (progress.selectedPath.length === 0) {
-    return progress.phase === 'selecting' && progress.completedCount === progress.puzzleIndex;
-  }
-  if (progress.selectedPath[0] !== puzzle.startCellId || progress.selectedPath.length > puzzle.requiredLength
-    || new Set(progress.selectedPath).size !== progress.selectedPath.length) return false;
-  for (let index = 0; index < progress.selectedPath.length; index += 1) {
-    const cell = puzzle.cells.find((item) => item.id === progress.selectedPath![index]);
-    if (!cell || cell.blocked) return false;
-    if (index > 0) {
-      const previous = puzzle.cells.find((item) => item.id === progress.selectedPath![index - 1])!;
-      if (Math.abs(previous.row - cell.row) + Math.abs(previous.column - cell.column) !== 1) return false;
-    }
-  }
-  if (progress.completedCount !== progress.puzzleIndex! + (progress.phase === 'solved' ? 1 : 0)) return false;
-  return progress.phase !== 'solved' || validatePath(puzzle, progress.selectedPath).status === 'solved';
+  if (progress.puzzles.some((item) => item.difficulty !== progress.difficulty)
+    || new Set(progress.selectedBridgeIds).size !== progress.selectedBridgeIds.length
+    || new Set(progress.failedBridgeIds).size !== progress.failedBridgeIds.length
+    || nodeAfterPath(puzzle, progress.selectedBridgeIds) !== progress.currentNodeId) return false;
+  const outgoing = new Set(outgoingBridges(puzzle, progress.currentNodeId).map((bridge) => bridge.id));
+  if (progress.failedBridgeIds.some((id) => !outgoing.has(id))
+    || (progress.revealedBridgeId !== undefined && !puzzle.bridges.some((bridge) => bridge.id === progress.revealedBridgeId))
+    || progress.completedCount !== progress.puzzleIndex! + (progress.phase === 'solved' ? 1 : 0)
+    || (progress.phase === 'rescue') !== (progress.lives === 0)
+    || (progress.phase === 'selecting' && progress.lives === 0)) return false;
+  return progress.phase !== 'solved' || validatePath(puzzle, progress.selectedBridgeIds).status === 'solved';
 };
 
 export const loadNumberPathProgress = (): NumberPathProgress | null => {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(PROGRESS_KEY) ?? 'null');
-    return isProgress(value) ? value : null;
+    if (isProgress(value)) return value;
+    if (localStorage.getItem(LEGACY_PROGRESS_KEY) !== null) localStorage.removeItem(LEGACY_PROGRESS_KEY);
+    return null;
   } catch {
     return null;
   }
@@ -105,6 +123,7 @@ export const loadNumberPathProgress = (): NumberPathProgress | null => {
 export const saveNumberPathProgress = (progress: NumberPathProgress): boolean => {
   try {
     localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress));
+    localStorage.removeItem(LEGACY_PROGRESS_KEY);
     return true;
   } catch {
     return false;
@@ -114,6 +133,7 @@ export const saveNumberPathProgress = (progress: NumberPathProgress): boolean =>
 export const clearNumberPathProgress = (): boolean => {
   try {
     localStorage.removeItem(PROGRESS_KEY);
+    localStorage.removeItem(LEGACY_PROGRESS_KEY);
     return true;
   } catch {
     return false;
@@ -122,8 +142,8 @@ export const clearNumberPathProgress = (): boolean => {
 
 const normalizeRecords = (value: unknown): NumberPathRecords => {
   if (!value || typeof value !== 'object') return DEFAULT_NUMBER_PATH_RECORDS;
-  const parsed = value as Partial<NumberPathRecords>;
-  if (parsed.schemaVersion !== 1 || !isDifficulty(parsed.lastDifficulty)
+  const parsed = value as Partial<NumberPathRecords> & { schemaVersion?: number };
+  if (![1, 2].includes(parsed.schemaVersion ?? 0) || !isDifficulty(parsed.lastDifficulty)
     || !isCount(parsed.completedSessions) || !isCount(parsed.completedPuzzles)
     || !isCount(parsed.totalBacktracks) || !isCount(parsed.hintSessions)) return DEFAULT_NUMBER_PATH_RECORDS;
   const byDifficulty: NumberPathRecords['byDifficulty'] = {};
@@ -132,11 +152,13 @@ const normalizeRecords = (value: unknown): NumberPathRecords => {
     if (record && isCount(record.completedSessions) && isCount(record.completedPuzzles)) byDifficulty[difficulty] = record;
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     lastDifficulty: parsed.lastDifficulty,
     completedSessions: parsed.completedSessions,
     completedPuzzles: parsed.completedPuzzles,
     totalBacktracks: parsed.totalBacktracks,
+    totalBridgeFailures: isCount(parsed.totalBridgeFailures) ? parsed.totalBridgeFailures : 0,
+    totalRetries: isCount(parsed.totalRetries) ? parsed.totalRetries : 0,
     hintSessions: parsed.hintSessions,
     byDifficulty,
     recentSignatures: Array.isArray(parsed.recentSignatures)
@@ -149,7 +171,9 @@ const normalizeRecords = (value: unknown): NumberPathRecords => {
 
 export const loadNumberPathRecords = (): NumberPathRecords => {
   try {
-    return normalizeRecords(JSON.parse(localStorage.getItem(RECORDS_KEY) ?? 'null'));
+    const records = normalizeRecords(JSON.parse(localStorage.getItem(RECORDS_KEY) ?? 'null'));
+    if (records !== DEFAULT_NUMBER_PATH_RECORDS) localStorage.setItem(RECORDS_KEY, JSON.stringify(records));
+    return records;
   } catch {
     return DEFAULT_NUMBER_PATH_RECORDS;
   }
@@ -186,11 +210,13 @@ export const saveNumberPathCompletion = (
   const previous = records.byDifficulty[progress.difficulty];
   const earnedDailyBadge = Boolean(progress.daily && progress.dateKey && !records.dailyBadges.includes(progress.dateKey));
   const next: NumberPathRecords = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     lastDifficulty: progress.difficulty,
     completedSessions: records.completedSessions + 1,
     completedPuzzles: records.completedPuzzles + NUMBER_PATH_SESSION_LENGTH,
     totalBacktracks: records.totalBacktracks + progress.backtracks,
+    totalBridgeFailures: records.totalBridgeFailures + progress.bridgeFailures,
+    totalRetries: records.totalRetries + progress.retries,
     hintSessions: records.hintSessions + (progress.hintsUsed > 0 ? 1 : 0),
     byDifficulty: {
       ...records.byDifficulty,

@@ -24,7 +24,7 @@ export type TransferParseResult =
   | { ok: true; transfer: LearningRecordTransfer; preview: LearningRecordPreview }
   | { ok: false; message: string };
 
-const expectedRecordSchema: Record<LearningRecordKey, number> = {
+const expectedRecordSchema: Record<LearningRecordKey, number | readonly number[]> = {
   'numbercal.history.v1': 1,
   'numbercal.language-mastery.v1': 1,
   'numbercal.skill-mastery.v2': 2,
@@ -32,12 +32,17 @@ const expectedRecordSchema: Record<LearningRecordKey, number> = {
   'numbercal.memory.records.v1': 1,
   'numbercal.story.records.v1': 1,
   'numbercal.balance.records.v1': 1,
-  'numbercal.number-path.records.v1': 1,
+  'numbercal.number-path.records.v1': [1, 2],
   'numbercal.shape-block.records.v1': 1
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const hasExpectedSchema = (key: LearningRecordKey, value: Record<string, unknown>): boolean => {
+  const expected = expectedRecordSchema[key];
+  return Array.isArray(expected) ? expected.includes(value.schemaVersion as number) : value.schemaVersion === expected;
+};
 
 const entryCount = (value: Record<string, unknown> | null, field: 'sessions' | 'entries'): number =>
   Array.isArray(value?.[field]) ? value[field].length : 0;
@@ -52,7 +57,7 @@ const isTransfer = (value: unknown): value is LearningRecordTransfer => {
   if (!(legacyOptional in records)) records[legacyOptional] = null;
   return LEARNING_RECORD_KEYS.every((key) => {
     const record = records[key];
-    return record === null || (isRecord(record) && record.schemaVersion === expectedRecordSchema[key]);
+    return record === null || (isRecord(record) && hasExpectedSchema(key, record));
   });
 };
 
@@ -61,7 +66,7 @@ const readRecord = (key: LearningRecordKey): Record<string, unknown> | null => {
     const raw = localStorage.getItem(key);
     if (!raw) return null;
     const value: unknown = JSON.parse(raw);
-    return isRecord(value) && value.schemaVersion === expectedRecordSchema[key] ? value : null;
+    return isRecord(value) && hasExpectedSchema(key, value) ? value : null;
   } catch {
     return null;
   }
