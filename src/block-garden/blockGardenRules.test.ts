@@ -26,9 +26,12 @@ describe('빈칸 정원 핵심 규칙', () => {
   it('8×8 빈 판에서 모양의 경계와 겹침을 판정한다', () => {
     const board = emptyGardenBoard();
     const square = shapeById('square-4')!;
+    const line = shapeById('line-3-h')!;
     expect(board).toHaveLength(64);
     expect(canPlaceShape(board, square, 6, 6)).toBe(true);
-    expect(canPlaceShape(board, square, 7, 7)).toBe(false);
+    expect(canPlaceShape(board, square, 0, 0)).toBe(false);
+    expect(canPlaceShape(board, line, 0, 1)).toBe(true);
+    expect(canPlaceShape(board, line, 0, 0)).toBe(false);
     board[boardIndex(6, 6)] = 'sun';
     expect(canPlaceShape(board, square, 6, 6)).toBe(false);
     expect(validPlacements(board, shapeById('seed')!)).toHaveLength(63);
@@ -52,12 +55,12 @@ describe('빈칸 정원 핵심 규칙', () => {
     const result = placeGardenPiece(gameWith(board, [piece('seed'), null, null]), 0, 0, 7, new SeededRandom(4));
     expect(result.clearedNow).toBe(2);
     expect(result.game.lastCleared).toHaveLength(15);
-    expect(result.game.score).toBe(161);
+    expect(result.game.score).toBe(191);
   });
 
   it('연속 수에서 다시 줄을 지우면 콤보 보너스를 준다', () => {
     expect(placementScore(1, 1, 1)).toBe(41);
-    expect(placementScore(1, 1, 2)).toBe(61);
+    expect(placementScore(1, 1, 2)).toBe(71);
     expect(placementScore(4, 0, 0)).toBe(4);
   });
 

@@ -39,3 +39,15 @@ export const unlockAudio = async (): Promise<void> => {
 export const playSuccessSound = (): void => {
   playTones([{ frequency: 523.25 }, { frequency: 659.25, offset: 0.08 }], 0.16, 0.24);
 };
+
+export const playGardenClearSound = (clearedLines: number, combo: number): void => {
+  const pitchBoost = Math.min(9, Math.max(0, clearedLines - 1) * 3 + Math.max(0, combo - 1) * 2);
+  const multiplier = 2 ** (pitchBoost / 12);
+  const melody = [
+    { frequency: 523.25 * multiplier, duration: 0.2 },
+    { frequency: 659.25 * multiplier, offset: 0.08, duration: 0.24 },
+    { frequency: 783.99 * multiplier, offset: 0.16, duration: 0.3 },
+    { frequency: 1046.5 * multiplier, offset: 0.24, duration: 0.34 }
+  ];
+  playTones(melody, Math.min(0.2, 0.16 + clearedLines * 0.015 + Math.max(0, combo - 1) * 0.01), 0.38);
+};

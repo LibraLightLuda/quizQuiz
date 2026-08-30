@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { CryptoRandom } from '../services/randomService';
-import { playSuccessSound, unlockAudio } from '../services/soundService';
+import { playGardenClearSound, unlockAudio } from '../services/soundService';
 import { BlockGardenIcon } from '../visuals/BlockGardenIcon';
 import {
   anyTrayPieceFits, boardIndex, canPlaceShape, createGardenGame, occupiedPercent, placeGardenPiece,
-  pieceFits, shapeById
+  pieceFits, shapeById, shapeCellsAt
 } from './blockGardenRules';
 import {
   clearGardenProgress, loadGardenProgress, loadGardenRecords, recordFinishedGardenGame,
@@ -147,14 +147,16 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
     const placedShape = placedPiece && shapeById(placedPiece.shapeId);
     if (placedShape) {
       showPlacementFeedback(
-        placedShape.cells.map((cell) => boardIndex(row + cell.row, column + cell.column)),
+        shapeCellsAt(placedShape, row, column).map((cell) => boardIndex(cell.row, cell.column)),
         result.clearedNow,
         result.game.lastGain
       );
     }
     setNotice(scoreMessage(result.clearedNow, result.game.combo, result.game.lastGain));
     setNoticeTone(result.clearedNow ? 'success' : 'neutral');
-    if (result.clearedNow && soundEnabled) void unlockAudio().then(playSuccessSound);
+    if (result.clearedNow && soundEnabled) {
+      void unlockAudio().then(() => playGardenClearSound(result.clearedNow, result.game.combo));
+    }
     if (result.game.status === 'game-over') finishGame(result.game);
     else {
       setGame(result.game);
@@ -206,7 +208,7 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
     if (!activeShape || previewAnchor === null) return new Set<number>();
     const row = Math.floor(previewAnchor / BOARD_SIZE);
     const column = previewAnchor % BOARD_SIZE;
-    return new Set(activeShape.cells.map((cell) => ({ row: row + cell.row, column: column + cell.column }))
+    return new Set(shapeCellsAt(activeShape, row, column)
       .filter((cell) => cell.row >= 0 && cell.row < BOARD_SIZE && cell.column >= 0 && cell.column < BOARD_SIZE)
       .map((cell) => boardIndex(cell.row, cell.column)));
   }, [activeShape, previewAnchor]);

@@ -1,5 +1,5 @@
 import type { RandomSource } from '../services/randomService';
-import { BOARD_SIZE, type GardenCell, type GardenGame, type GardenPiece, type GardenShape, type GardenTone, type PlacementResult } from './types';
+import { BOARD_SIZE, type GardenCell, type GardenGame, type GardenPiece, type GardenShape, type GardenTone, type PlacementResult, type Point } from './types';
 
 const shape = (id: string, label: string, weight: number, cells: GardenShape['cells']): GardenShape => ({ id, label, weight, cells });
 
@@ -35,10 +35,30 @@ export const shapeById = (shapeId: string): GardenShape | undefined => GARDEN_SH
 
 export const boardIndex = (row: number, column: number): number => row * BOARD_SIZE + column;
 
+/** The board cell under the player's finger is the shape's visual center. */
+export const shapeCenterOffset = (gardenShape: GardenShape): Point => {
+  const minRow = Math.min(...gardenShape.cells.map((cell) => cell.row));
+  const maxRow = Math.max(...gardenShape.cells.map((cell) => cell.row));
+  const minColumn = Math.min(...gardenShape.cells.map((cell) => cell.column));
+  const maxColumn = Math.max(...gardenShape.cells.map((cell) => cell.column));
+  return {
+    row: Math.round((minRow + maxRow) / 2),
+    column: Math.round((minColumn + maxColumn) / 2)
+  };
+};
+
+export const shapeCellsAt = (gardenShape: GardenShape, centerRow: number, centerColumn: number): Point[] => {
+  const center = shapeCenterOffset(gardenShape);
+  return gardenShape.cells.map((cell) => ({
+    row: centerRow - center.row + cell.row,
+    column: centerColumn - center.column + cell.column
+  }));
+};
+
 export const canPlaceShape = (board: readonly GardenCell[], gardenShape: GardenShape, row: number, column: number): boolean =>
-  gardenShape.cells.every((cell) => {
-    const targetRow = row + cell.row;
-    const targetColumn = column + cell.column;
+  shapeCellsAt(gardenShape, row, column).every((target) => {
+    const targetRow = target.row;
+    const targetColumn = target.column;
     return targetRow >= 0 && targetRow < BOARD_SIZE && targetColumn >= 0 && targetColumn < BOARD_SIZE
       && board[boardIndex(targetRow, targetColumn)] === null;
   });
@@ -130,7 +150,11 @@ const completedLines = (board: readonly GardenCell[]): { rows: number[]; columns
 };
 
 export const placementScore = (pieceCells: number, clearedLines: number, combo: number): number =>
-  pieceCells + (clearedLines ? 40 * clearedLines * clearedLines + Math.max(0, combo - 1) * 20 : 0);
+  pieceCells + (clearedLines
+    ? 40 * clearedLines * clearedLines
+      + Math.max(0, clearedLines - 1) * 30
+      + Math.max(0, combo - 1) * 30
+    : 0);
 
 export const placeGardenPiece = (
   game: GardenGame,
@@ -148,8 +172,8 @@ export const placeGardenPiece = (
   }
 
   const placedBoard = [...game.board];
-  gardenShape.cells.forEach((cell) => {
-    placedBoard[boardIndex(row + cell.row, column + cell.column)] = piece.tone;
+  shapeCellsAt(gardenShape, row, column).forEach((cell) => {
+    placedBoard[boardIndex(cell.row, cell.column)] = piece.tone;
   });
   const completed = completedLines(placedBoard);
   const clearedNow = completed.rows.length + completed.columns.length;

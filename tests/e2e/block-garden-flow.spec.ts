@@ -23,7 +23,7 @@ test('세 조각 중 하나를 골라 놓고 새로고침 뒤 이어 한다', as
   await startGarden(page);
   await expect(page.getByRole('gridcell')).toHaveCount(64);
   await page.locator('.garden-tray button:not(:disabled)').first().click();
-  await page.getByRole('gridcell', { name: '1행 1열, 빈칸' }).click();
+  await page.getByRole('gridcell', { name: '4행 4열, 빈칸' }).click();
   await expect(page.getByText(/좋은 자리예요\. \+\d+점/)).toBeVisible();
   const score = await page.locator('.garden-play-header > div').first().locator('strong').innerText();
   expect(Number(score)).toBeGreaterThan(0);
@@ -38,7 +38,7 @@ test('세 조각 중 하나를 골라 놓고 새로고침 뒤 이어 한다', as
 test('조각을 드래그해 정원에 놓는다', async ({ page }) => {
   await startGarden(page);
   const piece = page.locator('.garden-tray button:not(:disabled)').first();
-  const cell = page.getByRole('gridcell', { name: '1행 1열, 빈칸' });
+  const cell = page.getByRole('gridcell', { name: '4행 4열, 빈칸' });
   const from = await piece.boundingBox();
   const to = await cell.boundingBox();
   expect(from).not.toBeNull();
@@ -53,7 +53,7 @@ test('조각을 드래그해 정원에 놓는다', async ({ page }) => {
 test('손가락 드래그는 조각을 가리지 않는 위쪽 칸에 놓는다', async ({ page }) => {
   await startGarden(page);
   const piece = page.locator('.garden-tray button:not(:disabled)').first();
-  const cell = page.getByRole('gridcell', { name: '1행 1열, 빈칸' });
+  const cell = page.getByRole('gridcell', { name: '4행 4열, 빈칸' });
   const from = await piece.boundingBox();
   const to = await cell.boundingBox();
   expect(from).not.toBeNull();
@@ -92,13 +92,13 @@ test('한 줄을 완성하면 지우고 제거 보너스를 보여 준다', asyn
   await openGarden(page);
   await page.getByRole('button', { name: '이어 하던 정원 열기' }).click();
   await page.getByRole('button', { name: '가로 세 칸' }).click();
-  await page.getByRole('gridcell', { name: '1행 6열, 빈칸' }).click();
+  await page.getByRole('gridcell', { name: '1행 7열, 빈칸' }).click();
   await expect(page.getByText('한 줄이 활짝 피었어요! +43점')).toBeVisible();
   await expect(page.locator('.garden-notice')).toHaveClass(/is-success/);
   await expect(page.getByRole('gridcell', { name: '1행 1열, 빈칸' })).toBeVisible();
   await expect(page.getByText(/피운 줄\s*1/)).toBeVisible();
   await page.getByRole('button', { name: '세로 네 칸' }).click();
-  await page.getByRole('gridcell', { name: '6행 1열, 빈칸' }).click();
+  await page.getByRole('gridcell', { name: '8행 1열, 빈칸' }).click();
   await expect(page.locator('.garden-notice')).toHaveClass(/is-error/);
   await expect(page.getByText(/그 자리에는 놓을 수 없어요/)).toBeVisible();
 });
@@ -166,7 +166,7 @@ test('키보드만으로 조각을 고르고 놓을 수 있다', async ({ page }
   const piece = page.locator('.garden-tray button:not(:disabled)').first();
   await piece.focus();
   await page.keyboard.press('Enter');
-  const cell = page.getByRole('gridcell', { name: '1행 1열, 빈칸' });
+  const cell = page.getByRole('gridcell', { name: '4행 4열, 빈칸' });
   await cell.focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('.garden-play-header > div').first().locator('strong')).not.toHaveText('0');
@@ -179,6 +179,6 @@ test('브라우저 저장소가 막혀도 놀이를 계속하고 저장 실패�
   await startGarden(page);
   await expect(page.getByText('진행을 저장하지 못했어요. 현재 판은 계속할 수 있어요.')).toBeVisible();
   await page.locator('.garden-tray button:not(:disabled)').first().click();
-  await page.getByRole('gridcell', { name: '1행 1열, 빈칸' }).click();
+  await page.getByRole('gridcell', { name: '4행 4열, 빈칸' }).click();
   await expect(page.locator('.garden-play-header > div').first().locator('strong')).not.toHaveText('0');
 });
