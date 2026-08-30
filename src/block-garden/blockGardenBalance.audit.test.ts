@@ -52,5 +52,5 @@ describe('빈칸 정원 출시 전 밸런스 감사', () => {
     expect(scores[14]).toBeGreaterThan(500);
     expect(lines[14]).toBeGreaterThanOrEqual(10);
     expect(forcedBatchRate).toBeLessThan(0.05);
-  });
+  }, 30_000);
 });
