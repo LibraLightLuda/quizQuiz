@@ -30,6 +30,9 @@ import {
   saveNumberPathProgress
 } from './numberPathStorage';
 import type { NumberPathDifficulty, NumberPathProgress } from './types';
+import { useGrowth } from '../growth/GrowthContext';
+import { GrowthCelebration, GrowthRewardCard } from '../growth/GrowthUI';
+import type { GrowthAward } from '../growth/types';
 import './number-path.css';
 
 type NumberPathScreen = 'levels' | 'tutorial' | 'play' | 'result' | 'collection';
@@ -40,6 +43,7 @@ const numberPathIllustration = (fileName: string): string =>
 interface NumberPathModeProps {
   onExit: () => void;
   soundEnabled: boolean;
+  animationsEnabled: boolean;
 }
 
 interface NumberPathResult {
@@ -53,7 +57,8 @@ interface NumberPathResult {
 
 const random = new CryptoRandom();
 
-export default function NumberPathMode({ onExit, soundEnabled }: NumberPathModeProps) {
+export default function NumberPathMode({ onExit, soundEnabled, animationsEnabled }: NumberPathModeProps) {
+  const growth = useGrowth();
   const initialRecords = useMemo(() => loadNumberPathRecords(), []);
   const initialSaved = useMemo(() => loadNumberPathProgress(), []);
   const [records, setRecords] = useState(initialRecords);
@@ -64,6 +69,7 @@ export default function NumberPathMode({ onExit, soundEnabled }: NumberPathModeP
   const [message, setMessage] = useState('출발 섬에서 빛나는 숫자 다리 중 하나를 골라 보세요.');
   const [storageWarning, setStorageWarning] = useState(false);
   const [result, setResult] = useState<NumberPathResult | null>(null);
+  const [growthAward, setGrowthAward] = useState<GrowthAward | null>(null);
   const [returnNotice, setReturnNotice] = useState(false);
   const completedSessions = useRef(new Set<string>());
   const progressRef = useRef<NumberPathProgress | null>(null);
@@ -93,9 +99,11 @@ export default function NumberPathMode({ onExit, soundEnabled }: NumberPathModeP
     if (!progress || progress.phase !== 'finished' || completedSessions.current.has(progress.id)) return;
     completedSessions.current.add(progress.id);
     const saved = saveNumberPathCompletion(records, progress);
+    const growthResult = growth.awardCompletion('number-path');
+    setGrowthAward(growthResult.award);
     const newAchievementIds = getNewNumberPathAchievementIds(records, saved.records);
     setRecords(saved.records);
-    if (!saved.saved || !clearNumberPathProgress()) setStorageWarning(true);
+    if (!saved.saved || !growthResult.saved || !clearNumberPathProgress()) setStorageWarning(true);
     setSavedProgress(null);
     setResult({
       difficulty: progress.difficulty,
@@ -247,12 +255,14 @@ export default function NumberPathMode({ onExit, soundEnabled }: NumberPathModeP
     const newAchievements = getNumberPathAchievements(records).filter((item) => result.newAchievementIds.includes(item.id));
     return (
       <main className="screen number-path-result-screen">
+        {growthAward && <GrowthCelebration award={growthAward} animationsEnabled={animationsEnabled} />}
         <div className="number-path-result-icon">
           <img className="number-path-result-image" src={numberPathIllustration('number-path-result-treasure.webp')} alt="" aria-hidden="true" width="512" height="512" decoding="async" />
         </div>
         <p className="eyebrow">{result.daily ? '오늘의 길 완료!' : '다섯 길을 모두 찾았어요!'}</p>
         <h1>숫자를 더하며<br />길을 계획했어요</h1>
         <div className="number-path-result-stars" aria-label="별 3개 획득">★★★</div>
+        {growthAward && <GrowthRewardCard award={growthAward} />}
         {result.earnedDailyBadge && <aside className="number-path-daily-badge"><span>🏅</span><strong>오늘의 길 배지</strong><small>오늘도 차근차근 길을 찾았어요!</small></aside>}
         {newAchievements.length > 0 && <section className="number-path-new-achievements"><p>새 배지를 찾았어요!</p>{newAchievements.map((item) => <span key={item.id}><i>{item.icon}</i><strong>{item.title}</strong></span>)}</section>}
         <section className="number-path-result-stats" aria-label="게임 결과">

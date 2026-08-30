@@ -41,11 +41,25 @@ describe('빈칸 정원 저장', () => {
       dailyCompletedDates: [],
       weeklyKey: '2026-W35',
       weeklyLines: 9,
-      weeklyMultiClears: 0
+      weeklyMultiClears: 0,
+      modeHighScores: { classic: 420 }
     });
     expect(recordFinishedGardenGame(recordFinishedGardenGame(EMPTY_GARDEN_RECORDS, game), game).gamesPlayed).toBe(1);
     localStorage.setItem(GARDEN_PROGRESS_KEY, '{}');
     expect(clearGardenProgress()).toBe(true);
     expect(localStorage.getItem(GARDEN_PROGRESS_KEY)).toBeNull();
+  });
+
+  it('시간·돌·아이템 모드의 확장 상태를 안전하게 저장한다', () => {
+    const timed = createGardenGame(new SeededRandom(8), new Date('2026-08-31T00:00:00.000Z'), { mode: 'timed' });
+    expect(saveGardenProgress(timed)).toBe(true);
+    expect(loadGardenProgress()?.timedEndsAt).toBe('2026-08-31T00:01:30.000Z');
+
+    const items = createGardenGame(new SeededRandom(9), new Date(), { mode: 'items' });
+    items.board[0] = 'stone';
+    items.itemBoard![1] = 'rotate';
+    items.inventory = { bomb: 1, rotate: 2, reroll: 3 };
+    expect(saveGardenProgress(items)).toBe(true);
+    expect(loadGardenProgress()).toMatchObject({ mode: 'items', inventory: { bomb: 1, rotate: 2, reroll: 3 } });
   });
 });

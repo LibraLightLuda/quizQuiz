@@ -30,6 +30,10 @@ import { BalanceIcon } from '../visuals/BalanceIcon';
 import { NumberPathIcon } from '../visuals/NumberPathIcon';
 import { BlockGardenIcon } from '../visuals/BlockGardenIcon';
 import { GrowthDashboard } from './GrowthDashboard';
+import { useGrowth } from '../growth/GrowthContext';
+import { GrowthCelebration, GrowthMedal, GrowthRewardCard } from '../growth/GrowthUI';
+import { currentDayRecord, growthSummaryForState } from '../growth/growthModel';
+import type { GrowthAward } from '../growth/types';
 import '../styles/global.css';
 
 const random = new CryptoRandom();
@@ -115,6 +119,8 @@ const GameLoading = () => (
 );
 
 function App() {
+  const growth = useGrowth();
+  const growthSummary = growthSummaryForState(growth.state);
   const [state, dispatch] = useReducer(appReducer, undefined, () => createInitialState(loadSettings(), loadHistory()));
   const [sudokuOpen, setSudokuOpen] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
@@ -136,6 +142,7 @@ function App() {
   const [recordTransfer, setRecordTransfer] = useState<LearningRecordTransfer | null>(null);
   const [recordPreview, setRecordPreview] = useState<LearningRecordPreview | null>(null);
   const [recordTransferMessage, setRecordTransferMessage] = useState('');
+  const [latestGrowthAward, setLatestGrowthAward] = useState<GrowthAward | null>(null);
   const [reducedMotion, setReducedMotion] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
   );
@@ -326,6 +333,9 @@ function App() {
       };
       const saved = saveSession(summary, state.history);
       if (!saved.saved) setStorageWarning(true);
+      const growthResult = growth.awardCompletion(session.config.subject, new Date(summary.completedAt));
+      setLatestGrowthAward(growthResult.award);
+      if (!growthResult.saved) setStorageWarning(true);
       dispatch({ type: 'RESTORE_HISTORY', history: saved.history });
       dispatch({ type: 'ADVANCE', questionId, nextQuestion: null, summary });
       return;
@@ -359,7 +369,7 @@ function App() {
       setGenerationError('이 단계의 문제를 준비하지 못했어요. 다른 단계를 골라 주세요.');
       dispatch({ type: 'SESSION_ERROR' });
     }
-  }, [state.history, state.session]);
+  }, [growth, state.history, state.session]);
 
   useEffect(() => {
     const session = state.session;
@@ -428,6 +438,7 @@ function App() {
     recordedLanguageAnswers.current.clear();
     hintedQuestions.current.clear();
     dispatch({ type: 'RESTORE_HISTORY', history: loadHistory() });
+    growth.reload();
     setRecordTransfer(null);
     setRecordPreview(null);
     setRecordTransferMessage('학습 기록을 불러왔어요.');
@@ -712,6 +723,7 @@ function App() {
           <NumberPathMode
             onExit={() => setNumberPathOpen(false)}
             soundEnabled={state.settings.sound}
+            animationsEnabled={activeAnimations}
           />
         </Suspense>
       </div>
@@ -738,6 +750,10 @@ function App() {
         <main className="screen home-screen">
           <header className="home-header home-hero">
             <button className="icon-button settings-button" onClick={() => dispatch({ type: 'OPEN_SETTINGS', from: 'home' })} aria-label="설정 열기">⚙️</button>
+            <button className={`home-growth-status tier-${growthSummary.medal}`} onClick={() => setGrowthOpen(true)} aria-label={`성장 숲 열기, 레벨 ${growthSummary.level}, 오늘 ${Math.min(currentDayRecord(growth.state)?.completedSections.length ?? 0, 3)}개 완료`}>
+              <GrowthMedal xp={growth.state.totalXp} compact />
+              <span><strong>Lv.{growthSummary.level}</strong><small>오늘 {Math.min(currentDayRecord(growth.state)?.completedSections.length ?? 0, 3)} / 3</small></span>
+            </button>
             <div className="home-hero-copy">
               <p className="eyebrow">모리와 함께 한 걸음씩</p>
               <h1><small>어린이 학습 놀이터</small>오늘은 무엇을<br />배워 볼까요?</h1>
@@ -983,10 +999,12 @@ function App() {
 
       {state.screen === 'result' && state.latestResult && (
         <main className={`screen result-screen ${state.latestReview.length ? 'has-review' : ''}`}>
+          {latestGrowthAward && <GrowthCelebration award={latestGrowthAward} animationsEnabled={activeAnimations} />}
           <div className="result-burst result-guide-wrap" aria-hidden="true"><GuideCharacter className="result-guide" decorative /></div>
           <p className="eyebrow">{state.latestResult.config.subject === 'math' ? '오늘의 학습 끝!' : '이야기 조각을 찾았어요!'}</p>
           <h1>{state.latestResult.config.subject === 'math' ? `${state.latestResult.correctCount} / ${state.latestResult.totalCount}` : '작은 모험 끝!'}</h1>
           <p className="result-message">{resultMessage(state.latestResult.correctCount / state.latestResult.totalCount)}</p>
+          {latestGrowthAward && <GrowthRewardCard award={latestGrowthAward} />}
           {state.latestResult.config.subject !== 'math' && (
             <section className="story-sticker-card" aria-label="오늘 받은 이야기 스티커">
               <span aria-hidden="true">{learningThemeInfo[state.latestResult.config.theme].icon}</span>
@@ -1072,7 +1090,7 @@ function App() {
           </section>
           <section className="settings-panel danger-zone">
             <div><strong>학습·게임 기록</strong><small>최근 학습과 게임의 완료 기록을 지워요</small></div>
-            <button className="small-button" onClick={() => { if (window.confirm('최근 학습과 모든 게임의 완료 기록을 지울까요? 진행 중인 놀이는 유지돼요.')) { if (!clearAllLearningRecords()) setStorageWarning(true); languageMastery.current = []; skillMastery.current = []; recordedLanguageAnswers.current.clear(); hintedQuestions.current.clear(); dispatch({ type: 'CLEAR_HISTORY' }); } }}>기록 지우기</button>
+            <button className="small-button" onClick={() => { if (window.confirm('최근 학습과 모든 게임의 완료 기록을 지울까요? 진행 중인 놀이는 유지돼요.')) { if (!clearAllLearningRecords()) setStorageWarning(true); languageMastery.current = []; skillMastery.current = []; recordedLanguageAnswers.current.clear(); hintedQuestions.current.clear(); growth.reload(); setLatestGrowthAward(null); dispatch({ type: 'CLEAR_HISTORY' }); } }}>기록 지우기</button>
           </section>
           <p className="privacy-note">이름이나 개인정보는 모으지 않아요. 기록은 이 기기에만 저장돼요.</p>
         </main>

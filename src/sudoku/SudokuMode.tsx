@@ -20,6 +20,9 @@ import type { SudokuDifficulty, SudokuProgress, SudokuPuzzle } from './types';
 import SudokuTutorial from './SudokuTutorial';
 import { conflictMessage, sudokuConflicts } from './sudokuRules';
 import { SudokuCompleteVisual, SudokuToolIcon } from './SudokuVisuals';
+import { useGrowth } from '../growth/GrowthContext';
+import { GrowthCelebration, GrowthRewardCard } from '../growth/GrowthUI';
+import type { GrowthAward } from '../growth/types';
 import './sudoku.css';
 
 type SudokuScreen = 'levels' | 'tutorial' | 'play' | 'result';
@@ -52,6 +55,7 @@ const progressPercent = (progress: SudokuProgress): number => {
 };
 
 function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps) {
+  const growth = useGrowth();
   const initialProgress = useMemo(() => loadSudokuProgress(), []);
   const [screen, setScreen] = useState<SudokuScreen>('levels');
   const [savedProgress, setSavedProgress] = useState<SudokuProgress | null>(initialProgress);
@@ -64,6 +68,7 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
   const [elapsedMs, setElapsedMs] = useState(0);
   const [daily, setDaily] = useState(false);
   const [result, setResult] = useState<SudokuResult | null>(null);
+  const [growthAward, setGrowthAward] = useState<GrowthAward | null>(null);
   const [message, setMessage] = useState('빈칸을 누르고 알맞은 숫자를 골라 보세요.');
   const [generating, setGenerating] = useState<SudokuDifficulty | null>(null);
   const [storageWarning, setStorageWarning] = useState(false);
@@ -183,8 +188,10 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
     if (!puzzle) return;
     const finishTime = currentElapsed();
     const saved = saveSudokuCompletion(records, puzzle.difficulty, finishTime);
+    const growthResult = growth.awardCompletion('sudoku');
+    setGrowthAward(growthResult.award);
     setRecords(saved.records);
-    if (!saved.saved || !clearSudokuProgress()) setStorageWarning(true);
+    if (!saved.saved || !growthResult.saved || !clearSudokuProgress()) setStorageWarning(true);
     setSavedProgress(null);
     setElapsedMs(finishTime);
     setGrid(completedGrid);
@@ -394,11 +401,13 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
     const definition = sudokuDefinitions[result.difficulty];
     return (
       <main className="screen sudoku-result-screen">
+        {growthAward && <GrowthCelebration award={growthAward} animationsEnabled={animationsEnabled} />}
         {animationsEnabled && <SudokuConfetti />}
         <SudokuCompleteVisual />
         <p className="eyebrow">{result.daily ? '오늘의 스도쿠 성공!' : '퍼즐 완성!'}</p>
         <h1>{result.isBest ? '최고 기록이에요!' : '끝까지 해냈어요!'}</h1>
         <p className="sudoku-result-copy">집중해서 모든 칸을 채웠어요. 정말 멋져요!</p>
+        {growthAward && <GrowthRewardCard award={growthAward} />}
         <section className="sudoku-result-stats" aria-label="스도쿠 결과">
           <div><span aria-hidden="true">⏱</span><small>완료 시간</small><strong>{formatSudokuTime(result.elapsedMs)}</strong></div>
           <div><span aria-hidden="true">🏁</span><small>난이도</small><strong>{definition.label}</strong></div>

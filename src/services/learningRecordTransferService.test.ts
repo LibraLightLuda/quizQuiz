@@ -24,12 +24,24 @@ describe('학습 기록 내보내기와 가져오기', () => {
     expect(parseLearningRecordTransfer(JSON.stringify({ schemaVersion: 1 })).ok).toBe(false);
   });
 
-  it('빈칸 정원 키가 없던 이전 v1 기록 파일도 빈 기록으로 불러온다', () => {
+  it('빈칸 정원과 성장 키가 없던 이전 v1 기록 파일도 빈 기록으로 불러온다', () => {
     const transfer = createLearningRecordTransfer();
     delete (transfer.records as Partial<typeof transfer.records>)['numbercal.block-garden.records.v1'];
+    delete (transfer.records as Partial<typeof transfer.records>)['numbercal.growth.v1'];
     const parsed = parseLearningRecordTransfer(JSON.stringify(transfer));
     expect(parsed.ok).toBe(true);
-    if (parsed.ok) expect(parsed.transfer.records['numbercal.block-garden.records.v1']).toBeNull();
+    if (parsed.ok) {
+      expect(parsed.transfer.records['numbercal.block-garden.records.v1']).toBeNull();
+      expect(parsed.transfer.records['numbercal.growth.v1']).toBeNull();
+    }
+  });
+
+  it('성장 레벨 기록을 내보내고 복원한다', () => {
+    localStorage.setItem('numbercal.growth.v1', JSON.stringify({ schemaVersion: 1, totalXp: 40, days: [] }));
+    const transfer = createLearningRecordTransfer();
+    localStorage.removeItem('numbercal.growth.v1');
+    expect(restoreLearningRecordTransfer(transfer)).toBe(true);
+    expect(localStorage.getItem('numbercal.growth.v1')).toContain('"totalXp":40');
   });
 
   it('미리보기 뒤 전체 기록 묶음을 교체하고 없는 기록은 남기지 않는다', () => {

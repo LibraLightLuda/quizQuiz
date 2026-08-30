@@ -33,7 +33,8 @@ const expectedRecordSchema: Record<LearningRecordKey, number | readonly number[]
   'numbercal.story.records.v1': 1,
   'numbercal.balance.records.v1': 1,
   'numbercal.number-path.records.v1': [1, 2],
-  'numbercal.block-garden.records.v1': 1
+  'numbercal.block-garden.records.v1': 1,
+  'numbercal.growth.v1': 1
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -52,9 +53,9 @@ const isTransfer = (value: unknown): value is LearningRecordTransfer => {
     || typeof value.exportedAt !== 'string' || Number.isNaN(Date.parse(value.exportedAt)) || !isRecord(value.records)) return false;
   const records = value.records as Record<string, unknown>;
   if (Object.keys(records).some((key) => !LEARNING_RECORD_KEYS.includes(key as LearningRecordKey))) return false;
-  const legacyOptional: LearningRecordKey = 'numbercal.block-garden.records.v1';
-  if (LEARNING_RECORD_KEYS.some((key) => key !== legacyOptional && !(key in records))) return false;
-  if (!(legacyOptional in records)) records[legacyOptional] = null;
+  const legacyOptional = new Set<LearningRecordKey>(['numbercal.block-garden.records.v1', 'numbercal.growth.v1']);
+  if (LEARNING_RECORD_KEYS.some((key) => !legacyOptional.has(key) && !(key in records))) return false;
+  legacyOptional.forEach((key) => { if (!(key in records)) records[key] = null; });
   return LEARNING_RECORD_KEYS.every((key) => {
     const record = records[key];
     return record === null || (isRecord(record) && hasExpectedSchema(key, record));

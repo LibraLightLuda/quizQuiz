@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { SeededRandom } from '../services/randomService';
 import {
   anyTrayPieceFits, boardIndex, canPlaceShape, createGardenGame, createGardenTray, emptyGardenBoard,
-  createGardenPreview, occupiedPercent, placeGardenPiece, placementScore, shapeById, validPlacements
+  createGardenPreview, createGardenRefillTray, occupiedPercent, pieceFits, placeGardenPiece, placementScore, rerollGardenPiece,
+  rotateGardenPiece, shapeById, shapeForPiece, useGardenBomb, validPlacements
 } from './blockGardenRules';
 import { BOARD_SIZE } from './types';
 import type { GardenGame, GardenPiece } from './types';
@@ -102,6 +103,77 @@ describe('빈칸 정원 핵심 규칙', () => {
       game = placeGardenPiece(game, slot, Math.floor(placement / BOARD_SIZE), placement % BOARD_SIZE, random).game;
     }
     expect(game.tray[0]?.shapeId).toBe(expectedNext);
+    expect(new Set(game.tray.map((item) => item?.shapeId)).size).toBe(3);
     expect(createGardenPreview(game.board, random)).toBeTruthy();
+  });
+
+  it('미리 본 조각이 막혀도 새 묶음에는 서로 다른 놓을 수 있는 조각을 넣는다', () => {
+    const board = emptyGardenBoard();
+    board.forEach((_, index) => { if ((Math.floor(index / 8) + index % 8) % 2 === 0) board[index] = 'leaf'; });
+    const upcoming: GardenPiece = { uid: 'blocked-preview', shapeId: 'square-9', tone: 'sun' };
+    const tray = createGardenRefillTray(board, new SeededRandom(17), upcoming);
+    expect(tray[0]).toBe(upcoming);
+    expect(new Set(tray.map((item) => item.shapeId)).size).toBe(3);
+    expect(anyTrayPieceFits(board, tray)).toBe(true);
+  });
+
+  it('회전 아이템은 자유롭게 모양을 90도 돌린다', () => {
+    const game = createGardenGame(new SeededRandom(4), new Date(), { mode: 'items' });
+    game.tray = [piece('line-3-h'), null, null];
+    game.inventory = { bomb: 0, rotate: 1, reroll: 0 };
+    const rotated = rotateGardenPiece(game, 0)!;
+    expect(shapeForPiece(rotated.tray[0]!)?.cells).toEqual(shapeById('line-3-v')?.cells);
+    expect(rotated.inventory?.rotate).toBe(0);
+  });
+
+  it('돌밭 정원의 회색 돌은 줄을 채우지만 라인 제거 뒤에도 남는다', () => {
+    const board = emptyGardenBoard();
+    board[boardIndex(0, 0)] = 'stone';
+    for (let column = 1; column < 7; column += 1) board[boardIndex(0, column)] = 'water';
+    const game = { ...gameWith(board, [piece('seed'), null, null]), mode: 'stone' as const };
+    const result = placeGardenPiece(game, 0, 0, 7, new SeededRandom(7));
+    expect(result.clearedNow).toBe(1);
+    expect(result.game.board[boardIndex(0, 0)]).toBe('stone');
+    expect(result.game.board.slice(1, 8).every((cell) => cell === null)).toBe(true);
+  });
+
+  it('돌밭 정원은 두 번째 줄을 피우면 영구 돌을 추가한다', () => {
+    const board = emptyGardenBoard();
+    for (let column = 0; column < 7; column += 1) board[boardIndex(0, column)] = 'leaf';
+    const game = { ...gameWith(board, [piece('seed'), null, null]), mode: 'stone' as const, clearedLines: 1 };
+    const result = placeGardenPiece(game, 0, 0, 7, new SeededRandom(9));
+    expect(result.stonesAdded).toBe(1);
+    expect(result.game.board.filter((cell) => cell === 'stone')).toHaveLength(1);
+  });
+
+  it('아이템 칸을 줄로 지우면 아이템을 얻고 돌 함정은 즉시 발동한다', () => {
+    const board = emptyGardenBoard();
+    for (let column = 0; column < 7; column += 1) board[boardIndex(0, column)] = 'berry';
+    const game = {
+      ...gameWith(board, [piece('seed'), null, null]),
+      mode: 'items' as const,
+      itemBoard: Array.from({ length: 64 }, (_, index) => index === 0 ? 'bomb' as const : index === 1 ? 'stone' as const : null),
+      inventory: { bomb: 0, rotate: 0, reroll: 0 }
+    };
+    const result = placeGardenPiece(game, 0, 0, 7, new SeededRandom(11));
+    expect(result.collectedItems).toEqual(expect.arrayContaining(['bomb', 'stone']));
+    expect(result.game.inventory?.bomb).toBeGreaterThanOrEqual(1);
+    expect(result.stonesAdded).toBe(1);
+  });
+
+  it('폭탄은 색깔 블록만 2×2로 치우고 리롤은 선택 조각을 바꾼다', () => {
+    const game = createGardenGame(new SeededRandom(13), new Date(), { mode: 'items' });
+    game.board[0] = 'leaf';
+    game.board[1] = 'stone';
+    game.board[8] = 'sun';
+    game.inventory = { bomb: 1, rotate: 0, reroll: 1 };
+    const bombed = useGardenBomb(game, 0, 0)!;
+    expect(bombed.board[0]).toBeNull();
+    expect(bombed.board[1]).toBe('stone');
+    expect(bombed.board[8]).toBeNull();
+    expect(bombed.inventory?.bomb).toBe(0);
+    const rerolled = rerollGardenPiece(bombed, 0, new SeededRandom(21))!;
+    expect(rerolled.inventory?.reroll).toBe(0);
+    expect(pieceFits(rerolled.board, rerolled.tray[0]!)).toBe(true);
   });
 });

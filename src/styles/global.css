@@ -285,6 +285,48 @@ h1, h2, p { overflow-wrap: anywhere; }
   .home-recommendation button b { grid-column: 2; justify-self: start; }
   .recommendation-icon { width: 52px; height: 52px; }
 }
+
+/* Shared daily growth, level and medal system */
+.home-growth-status { position: absolute; left: 12px; top: 12px; z-index: 3; min-height: 48px; padding: 4px 10px 4px 5px; display: flex; align-items: center; gap: 7px; border: 2px solid rgba(58,125,88,.24); border-radius: 17px; background: rgba(255,255,255,.94); color: var(--ink); box-shadow: 0 5px 15px rgba(45,82,60,.11); cursor: pointer; }
+.home-growth-status > span:last-child { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.05; }.home-growth-status strong { font-size: 15px; }.home-growth-status small { margin-top: 3px; color: #287454; font-size: 11px; font-weight: 800; }
+.home-hero-copy { padding-top: 46px; }
+
+.growth-medal { --medal-color: #8c6a43; position: relative; width: 116px; height: 132px; flex: 0 0 116px; display: inline-grid; place-items: center; filter: drop-shadow(0 9px 12px rgba(52,68,52,.17)); }
+.growth-medal.is-compact { width: 40px; height: 42px; flex-basis: 40px; filter: none; }
+.growth-medal-core { position: relative; z-index: 2; width: 78px; height: 78px; display: grid; place-items: center; border: 6px solid color-mix(in srgb, var(--medal-color) 82%, white); border-radius: 50%; background: radial-gradient(circle at 35% 28%, white, color-mix(in srgb, var(--medal-color) 18%, white) 56%, color-mix(in srgb, var(--medal-color) 48%, white)); box-shadow: inset 0 0 0 3px rgba(255,255,255,.7), 0 0 0 3px color-mix(in srgb, var(--medal-color) 36%, transparent); font-size: 40px; }
+.growth-medal.is-compact .growth-medal-core { width: 34px; height: 34px; border-width: 3px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.7); font-size: 20px; }
+.growth-medal-ribbon { position: absolute; z-index: 1; left: 35px; bottom: 2px; width: 46px; height: 50px; background: linear-gradient(90deg, color-mix(in srgb,var(--medal-color) 75%,#744), color-mix(in srgb,var(--medal-color) 45%,white)); clip-path: polygon(0 0,100% 0,86% 100%,50% 78%,14% 100%); }.growth-medal.is-compact .growth-medal-ribbon { display: none; }
+.growth-medal-rays { position: absolute; z-index: 3; inset: 0; pointer-events: none; }.growth-medal-rays i { --angle: calc(var(--spark-index) * 45deg); position: absolute; left: 50%; top: 42%; color: #f4c531; font-size: 15px; font-style: normal; transform: translate(-50%,-50%) rotate(var(--angle)) translateY(-52px) rotate(calc(var(--angle) * -1)); text-shadow: 0 1px white; }.growth-medal.is-compact .growth-medal-rays { display: none; }
+.growth-sparkle-rank { position: absolute; z-index: 4; right: -2px; bottom: 13px; padding: 3px 6px; border-radius: 10px; background: #5642ad; color: white; font-size: 11px; }.growth-medal.is-compact .growth-sparkle-rank { right: -7px; bottom: -4px; padding: 2px 4px; font-size: 8px; }
+.growth-medal.tier-sprout { --medal-color: #a77843; }.growth-medal.tier-leaf { --medal-color: #81a8a0; }.growth-medal.tier-bud { --medal-color: #c98683; }.growth-medal.tier-gold-flower { --medal-color: #d4a71f; }.growth-medal.tier-starlight-forest { --medal-color: #7869c7; }.growth-medal.tier-rainbow-forest { --medal-color: #d69a2e; }.growth-medal.tier-rainbow-forest .growth-medal-core { background: conic-gradient(from -35deg,#fff3b4,#dff8d5,#d7efff,#eadcff,#ffdce2,#fff3b4); }
+
+.growth-reward-card { width: min(100%, 560px); margin: 16px auto; padding: 13px 15px; display: flex; align-items: center; gap: 12px; border: 2px solid #bfe2cd; border-radius: 21px; background: linear-gradient(135deg,#effaf4,#fff9df); color: var(--ink); text-align: left; box-shadow: 0 7px 18px rgba(45,82,60,.07); }
+.growth-reward-card.no-reward { border-color: #dedbea; background: #f8f7fc; }.growth-reward-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }.growth-reward-copy > small { color: #48705c; font-weight: 750; }.growth-reward-copy > strong { color: #176a48; font-size: 18px; }.growth-reward-copy em { color: #8a6300; font-size: 12px; font-style: normal; font-weight: 850; }.growth-reward-copy > span:not(.growth-reward-progress) { color: var(--muted); font-size: 12px; }
+.growth-reward-progress { height: 7px; margin-top: 4px; overflow: hidden; border-radius: 99px; background: #dfe7e1; }.growth-reward-progress i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#49a676,#e0b631); }
+
+.growth-celebration { position: fixed; z-index: 1000; inset: 0; padding: 20px; display: grid; place-items: center; background: rgba(35,31,62,.53); backdrop-filter: blur(4px); }
+.growth-celebration > div { width: min(100%, 350px); padding: 24px 20px 20px; display: flex; flex-direction: column; align-items: center; overflow: hidden; border: 3px solid #e6cf76; border-radius: 30px; background: radial-gradient(circle at 50% 10%,#fffce9,#fff 58%,#effaf4); box-shadow: 0 24px 60px rgba(22,17,50,.27); text-align: center; animation: growth-celebration-in .45s cubic-bezier(.2,.9,.25,1.15); }.growth-celebration.is-tier-up > div { border-color: #ba9cff; box-shadow: 0 24px 70px rgba(100,66,190,.3),0 0 40px rgba(255,223,105,.28); }
+.growth-celebration h2 { margin: 0; color: #3c2d91; font-size: 34px; }.growth-celebration > div > strong { margin-top: 4px; color: #287454; font-size: 18px; }.growth-celebration button { width: 100%; min-height: 50px; margin-top: 17px; border: 0; border-radius: 16px; background: var(--primary); color: white; font-size: 17px; font-weight: 850; cursor: pointer; }
+@keyframes growth-celebration-in { from { opacity: 0; transform: translateY(20px) scale(.86); } to { opacity: 1; transform: none; } }
+.growth-celebration.reduce-growth-motion > div, .reduce-motion .growth-celebration > div { animation: none; }
+
+.growth-level-card { margin-top: 15px; padding: 16px 18px; display: flex; align-items: center; gap: 14px; border: 2px solid #c9dfcf; border-radius: 27px; background: linear-gradient(135deg,#fff,#eef9f2); box-shadow: 0 9px 22px rgba(40,111,76,.08); }.growth-level-copy { min-width: 0; flex: 1; }.growth-level-copy .eyebrow { margin-bottom: 2px; color: #287454; }.growth-level-copy h2 { margin: 0; font-size: 25px; }.growth-level-copy p { margin: 4px 0; color: var(--muted); font-size: 13px; }.growth-level-copy > small { display: block; margin-top: 7px; color: #6b5a20; font-weight: 750; line-height: 1.35; }
+.growth-level-progress { height: 10px; overflow: hidden; border-radius: 99px; background: #dfe7e1; }.growth-level-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#49a676,#e0b631); }
+.growth-rhythm-card { margin-top: 15px; padding: 0 17px 18px; border: 2px solid #e1deec; border-radius: 25px; background: rgba(255,255,255,.94); }.growth-rhythm-card .growth-section-title { margin-top: 17px; }.growth-today-summary { display: flex; align-items: baseline; gap: 9px; margin-bottom: 11px; }.growth-today-summary strong { color: #287454; font-size: 25px; }.growth-today-summary span { color: var(--muted); font-size: 13px; }
+.growth-section-stamps { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; }.growth-section-stamps > span { min-width: 0; min-height: 64px; padding: 7px 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border: 2px solid #e6e4ec; border-radius: 15px; background: #f7f7fa; color: #aaa7b3; text-align: center; }.growth-section-stamps > span.is-done { border-color: #8bc7a5; background: #effaf4; color: #237751; }.growth-section-stamps i { font-size: 20px; font-style: normal; font-weight: 900; }.growth-section-stamps small { max-width: 100%; overflow: hidden; font-size: 10px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.growth-week-heading { margin: 17px 0 8px; display: flex; justify-content: space-between; gap: 8px; }.growth-week-heading strong { color: #3c2d91; }.growth-week-heading small { color: var(--muted); font-size: 11px; text-align: right; }.growth-week-grid { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 5px; }.growth-week-grid span { min-height: 54px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; border-radius: 13px; background: #f1f0f6; color: #85818f; }.growth-week-grid span.is-active { background: #e7f6ed; color: #287454; }.growth-week-grid small { font-size: 10px; font-weight: 850; }.growth-week-grid i { font-size: 18px; font-style: normal; }
+
+@media (max-width: 420px) {
+  .growth-level-card { padding: 13px 12px; gap: 7px; }.growth-level-card > .growth-medal { transform: scale(.82); margin: -9px; }.growth-level-copy h2 { font-size: 21px; }.growth-level-copy > small { font-size: 11px; }
+  .growth-reward-card { padding: 11px; }.growth-reward-copy > strong { font-size: 16px; }
+}
+@media (max-width: 359px) {
+  .home-growth-status { left: 8px; top: 8px; }.home-hero .settings-button { top: 8px; right: 8px; }.home-hero-copy { padding-top: 50px; }
+  .growth-section-stamps { gap: 5px; }.growth-section-stamps > span { min-height: 58px; }.growth-week-grid { gap: 3px; }.growth-week-grid span { min-height: 49px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .growth-celebration > div { animation: none; }
+}
 .language-activity { margin-top: 2px; }
 .activity-demo { min-height: 290px; padding: 20px; display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 14px; border: 2px solid #d9d4ff; border-radius: 26px; background: linear-gradient(145deg,#f5f2ff,#fff9df); text-align: left; }
 .activity-demo-guide { width: 92px; height: 112px; object-fit: contain; }

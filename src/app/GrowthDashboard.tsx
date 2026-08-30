@@ -2,6 +2,19 @@ import { useEffect, useRef, useState } from 'react';
 import type { LanguageMasteryEntry, SessionSummary, SkillMastery } from '../domain/types';
 import { buildChildGrowthSummary, buildParentGrowthSummary } from '../domain/growthSummary';
 import { GuideCharacter } from '../visuals/GuideCharacter';
+import { useGrowth } from '../growth/GrowthContext';
+import { GrowthMedal } from '../growth/GrowthUI';
+import {
+  GROWTH_SECTION_ICONS,
+  GROWTH_SECTION_LABELS,
+  MEDAL_INFO,
+  activeDaysInWeek,
+  currentDayRecord,
+  growthSummaryForState,
+  localDateKey,
+  weekKeyForDate
+} from '../growth/growthModel';
+import { GROWTH_SECTION_IDS, type MedalTier } from '../growth/types';
 
 interface GrowthDashboardProps {
   wordMastery: readonly LanguageMasteryEntry[];
@@ -13,12 +26,24 @@ interface GrowthDashboardProps {
 const EMPTY_LABEL = '아직 만날 친구가 기다리고 있어요.';
 
 export function GrowthDashboard({ wordMastery, skillMastery, history, onBack }: GrowthDashboardProps) {
+  const growth = useGrowth();
+  const growthSummary = growthSummaryForState(growth.state);
   const [parentGateOpen, setParentGateOpen] = useState(false);
   const [parentUnlocked, setParentUnlocked] = useState(false);
   const [holding, setHolding] = useState(false);
   const holdTimer = useRef<number | null>(null);
   const child = buildChildGrowthSummary(wordMastery, skillMastery);
   const parent = buildParentGrowthSummary(wordMastery, skillMastery, history);
+  const today = currentDayRecord(growth.state);
+  const weekStart = new Date(`${weekKeyForDate(new Date())}T00:00:00`);
+  const weekDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart);
+    date.setDate(date.getDate() + index);
+    const dateKey = localDateKey(date);
+    return { dateKey, active: growth.state.days.some((day) => day.dateKey === dateKey && day.completedSections.length > 0) };
+  });
+  const medalOrder: MedalTier[] = ['seed', 'sprout', 'leaf', 'bud', 'gold-flower', 'starlight-forest', 'rainbow-forest'];
+  const nextMedal = medalOrder[Math.min(medalOrder.length - 1, medalOrder.indexOf(growthSummary.medal) + 1)];
 
   const cancelHold = () => {
     if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
@@ -121,6 +146,30 @@ export function GrowthDashboard({ wordMastery, skillMastery, history, onBack }: 
           <h1>오늘도 숲이<br />한 뼘 자랐어요!</h1>
         </div>
         <GuideCharacter className="growth-guide" decorative />
+      </section>
+      <section className={`growth-level-card tier-${growthSummary.medal}`} aria-labelledby="growth-level-title">
+        <GrowthMedal xp={growth.state.totalXp} />
+        <div className="growth-level-copy">
+          <p className="eyebrow">{MEDAL_INFO[growthSummary.medal].label}</p>
+          <h2 id="growth-level-title">레벨 {growthSummary.level}{growthSummary.sparkleRank ? ` · 반짝임 ${growthSummary.sparkleRank}` : ''}</h2>
+          <p>{growthSummary.level >= 30 ? `다음 반짝임까지 ${growthSummary.progress.remaining}점` : `다음 레벨까지 ${growthSummary.progress.remaining}점`}</p>
+          <div className="growth-level-progress" role="progressbar" aria-valuenow={Math.round(growthSummary.progress.percent)} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${growthSummary.progress.percent}%` }} /></div>
+          <small>{growthSummary.level >= 30 ? '무지개숲을 계속 반짝이게 해요' : `다음 메달: ${MEDAL_INFO[nextMedal].label} · ${MEDAL_INFO[nextMedal].benefit}`}</small>
+        </div>
+      </section>
+      <section className="growth-rhythm-card" aria-labelledby="growth-rhythm-title">
+        <div className="growth-section-title"><p className="eyebrow">매일 조금씩</p><h2 id="growth-rhythm-title">오늘의 성장</h2></div>
+        <div className="growth-today-summary"><strong>{Math.min(today?.completedSections.length ?? 0, 3)} / 3</strong><span>성장 점수를 받은 놀이</span></div>
+        <div className="growth-section-stamps" aria-label="오늘 완료한 9개 섹션">
+          {GROWTH_SECTION_IDS.map((sectionId) => {
+            const done = today?.completedSections.includes(sectionId) ?? false;
+            return <span key={sectionId} className={done ? 'is-done' : ''}><i aria-hidden="true">{GROWTH_SECTION_ICONS[sectionId]}</i><small>{GROWTH_SECTION_LABELS[sectionId]}</small></span>;
+          })}
+        </div>
+        <div className="growth-week-heading"><strong>이번 주 {activeDaysInWeek(growth.state)} / 5일</strong><small>5일을 채우면 성장 점수 20점</small></div>
+        <div className="growth-week-grid" aria-label="이번 주 활동일">
+          {weekDays.map((day, index) => <span key={day.dateKey} className={day.active ? 'is-active' : ''}><small>{['월', '화', '수', '목', '금', '토', '일'][index]}</small><i aria-hidden="true">{day.active ? '🌱' : '·'}</i></span>)}
+        </div>
       </section>
       <section className="growth-friend-grid" aria-label="나의 낱말 모험">
         <article><span aria-hidden="true">🌱</span><div><h2>오늘 만난 친구</h2><p>{child.metWords.length ? child.metWords.join(' · ') : EMPTY_LABEL}</p></div></article>

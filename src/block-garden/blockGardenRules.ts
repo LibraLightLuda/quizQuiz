@@ -1,5 +1,8 @@
 import type { RandomSource } from '../services/randomService';
-import { BOARD_SIZE, type GardenCell, type GardenGame, type GardenMode, type GardenPiece, type GardenShape, type GardenTone, type PlacementResult, type Point } from './types';
+import {
+  BOARD_SIZE, type GardenCell, type GardenGame, type GardenInventory, type GardenItem, type GardenMode,
+  type GardenPiece, type GardenShape, type GardenTone, type PlacementResult, type Point
+} from './types';
 
 const shape = (id: string, label: string, weight: number, cells: GardenShape['cells']): GardenShape => ({ id, label, weight, cells });
 
@@ -28,10 +31,48 @@ export const GARDEN_SHAPES: readonly GardenShape[] = [
 ] as const;
 
 export const GARDEN_TONES: readonly GardenTone[] = ['leaf', 'sun', 'berry', 'water', 'lavender'];
+export const EMPTY_GARDEN_INVENTORY: GardenInventory = { bomb: 0, rotate: 0, reroll: 0 };
+export const TIMED_GARDEN_SECONDS = 90;
+export const STONE_LINE_INTERVAL = 2;
+const ITEM_SPAWN_CHANCE = 0.45;
 
 export const emptyGardenBoard = (): GardenCell[] => Array.from({ length: BOARD_SIZE * BOARD_SIZE }, () => null);
 
 export const shapeById = (shapeId: string): GardenShape | undefined => GARDEN_SHAPES.find((item) => item.id === shapeId);
+
+const normalizedCells = (cells: readonly Point[]): Point[] => {
+  const minRow = Math.min(...cells.map((cell) => cell.row));
+  const minColumn = Math.min(...cells.map((cell) => cell.column));
+  return cells.map((cell) => ({ row: cell.row - minRow, column: cell.column - minColumn }))
+    .sort((left, right) => left.row - right.row || left.column - right.column);
+};
+
+const rotateCells = (cells: readonly Point[], turns: number): Point[] => {
+  let rotated = normalizedCells(cells);
+  for (let turn = 0; turn < turns; turn += 1) {
+    rotated = normalizedCells(rotated.map((cell) => ({ row: cell.column, column: -cell.row })));
+  }
+  return rotated;
+};
+
+export const shapeForPiece = (piece: GardenPiece): GardenShape | undefined => {
+  const base = shapeById(piece.shapeId);
+  if (!base) return undefined;
+  const rotation = piece.rotation ?? 0;
+  if (!rotation) return base;
+  return {
+    ...base,
+    id: `${base.id}-rotation-${rotation}`,
+    label: `${base.label} · 회전`,
+    cells: rotateCells(base.cells, rotation)
+  };
+};
+
+export const pieceCanRotate = (piece: GardenPiece): boolean => {
+  const current = shapeForPiece(piece);
+  const next = shapeForPiece({ ...piece, rotation: (((piece.rotation ?? 0) + 1) % 4) as GardenPiece['rotation'] });
+  return Boolean(current && next && JSON.stringify(current.cells) !== JSON.stringify(next.cells));
+};
 
 export const boardIndex = (row: number, column: number): number => row * BOARD_SIZE + column;
 
@@ -74,7 +115,7 @@ export const validPlacements = (board: readonly GardenCell[], gardenShape: Garde
 };
 
 export const pieceFits = (board: readonly GardenCell[], piece: GardenPiece): boolean => {
-  const gardenShape = shapeById(piece.shapeId);
+  const gardenShape = shapeForPiece(piece);
   return Boolean(gardenShape && validPlacements(board, gardenShape).length);
 };
 
@@ -127,21 +168,55 @@ export const createGardenTray = (board: readonly GardenCell[], random: RandomSou
   ));
 };
 
+/** Keeps the promised preview while making the rest of the refill varied and playable. */
+export const createGardenRefillTray = (
+  board: readonly GardenCell[],
+  random: RandomSource,
+  upcoming: GardenPiece
+): GardenPiece[] => {
+  const selected: GardenShape[] = [];
+  const excludedShapeIds = new Set([upcoming.shapeId]);
+  const upcomingFits = pieceFits(board, upcoming);
+
+  for (let slot = 0; slot < 2; slot += 1) {
+    let candidates = GARDEN_SHAPES.filter((candidate) => !excludedShapeIds.has(candidate.id));
+    if (slot === 0 && !upcomingFits) {
+      const fitting = candidates.filter((candidate) => validPlacements(board, candidate).length > 0);
+      if (fitting.length) candidates = fitting;
+    }
+    const chosen = chooseWeightedShape(random, board, candidates.length ? candidates : GARDEN_SHAPES);
+    selected.push(chosen);
+    excludedShapeIds.add(chosen.id);
+  }
+
+  return [upcoming, ...selected.map((candidate, index) => createPiece(
+    candidate,
+    GARDEN_TONES[Math.min(GARDEN_TONES.length - 1, Math.floor(random.next() * GARDEN_TONES.length + index + 1) % GARDEN_TONES.length)]
+  ))];
+};
+
 export const createGardenGame = (
   random: RandomSource,
   now = new Date(),
   options: { mode?: GardenMode; dailyDate?: string; dailyTargetLines?: number } = {}
 ): GardenGame => {
   const board = emptyGardenBoard();
+  const mode = options.mode ?? 'classic';
   return {
     schemaVersion: 1,
     board,
     tray: createGardenTray(board, random),
     nextPiece: createGardenPreview(board, random),
-    mode: options.mode ?? 'classic',
+    mode,
     dailyDate: options.dailyDate,
     dailyTargetLines: options.dailyTargetLines,
     dailyCompleted: false,
+    timedEndsAt: mode === 'timed' ? new Date(now.getTime() + TIMED_GARDEN_SECONDS * 1000).toISOString() : undefined,
+    timeLimitSeconds: mode === 'timed' ? TIMED_GARDEN_SECONDS : undefined,
+    itemBoard: mode === 'items' ? Array.from({ length: BOARD_SIZE * BOARD_SIZE }, () => null) : undefined,
+    inventory: mode === 'items' ? { ...EMPTY_GARDEN_INVENTORY } : undefined,
+    lastCollectedItems: [],
+    lastStonesAdded: 0,
     score: 0,
     clearedLines: 0,
     combo: 0,
@@ -166,6 +241,56 @@ const completedLines = (board: readonly GardenCell[]): { rows: number[]; columns
   return { rows, columns, cells: [...cells] };
 };
 
+const chooseGardenItem = (random: RandomSource): GardenItem => {
+  const value = random.next();
+  if (value < 0.28) return 'bomb';
+  if (value < 0.52) return 'rotate';
+  if (value < 0.80) return 'reroll';
+  return 'stone';
+};
+
+const completesLineWithStone = (board: readonly GardenCell[], index: number): boolean => {
+  const row = Math.floor(index / BOARD_SIZE);
+  const column = index % BOARD_SIZE;
+  const rowFull = Array.from({ length: BOARD_SIZE }, (_, cellColumn) => cellColumn === column
+    || board[boardIndex(row, cellColumn)] !== null).every(Boolean);
+  const columnFull = Array.from({ length: BOARD_SIZE }, (_, cellRow) => cellRow === row
+    || board[boardIndex(cellRow, column)] !== null).every(Boolean);
+  return rowFull || columnFull;
+};
+
+const addPermanentStones = (
+  board: GardenCell[],
+  itemBoard: Array<GardenItem | null> | undefined,
+  count: number,
+  random: RandomSource
+): number => {
+  let added = 0;
+  for (let stone = 0; stone < count; stone += 1) {
+    const empty = board.map((cell, index) => cell === null ? index : -1).filter((index) => index >= 0);
+    if (!empty.length) break;
+    const safer = empty.filter((index) => !completesLineWithStone(board, index));
+    if (!safer.length) break;
+    const candidates = safer;
+    const selected = candidates[Math.min(candidates.length - 1, Math.floor(random.next() * candidates.length))];
+    board[selected] = 'stone';
+    if (itemBoard) itemBoard[selected] = null;
+    added += 1;
+  }
+  return added;
+};
+
+const inventoryCanHelp = (game: GardenGame): boolean => {
+  if (game.mode !== 'items' || !game.inventory) return false;
+  const pieces = game.tray.filter((piece): piece is GardenPiece => piece !== null);
+  return (game.inventory.bomb > 0 && game.board.some((cell) => cell !== null && cell !== 'stone'))
+    || (game.inventory.rotate > 0 && pieces.some(pieceCanRotate))
+    || (game.inventory.reroll > 0 && pieces.length > 0);
+};
+
+export const gardenGameCanContinue = (game: GardenGame): boolean =>
+  anyTrayPieceFits(game.board, game.tray) || inventoryCanHelp(game);
+
 export const placementScore = (pieceCells: number, clearedLines: number, combo: number): number =>
   pieceCells + (clearedLines
     ? 40 * clearedLines * clearedLines
@@ -183,50 +308,160 @@ export const placeGardenPiece = (
 ): PlacementResult => {
   if (game.status !== 'playing') return { game, placed: false, clearedNow: 0 };
   const piece = game.tray[trayIndex];
-  const gardenShape = piece ? shapeById(piece.shapeId) : undefined;
+  const gardenShape = piece ? shapeForPiece(piece) : undefined;
   if (!piece || !gardenShape || !canPlaceShape(game.board, gardenShape, row, column)) {
     return { game, placed: false, clearedNow: 0 };
   }
 
   const placedBoard = [...game.board];
-  shapeCellsAt(gardenShape, row, column).forEach((cell) => {
-    placedBoard[boardIndex(cell.row, cell.column)] = piece.tone;
+  const placedIndices = shapeCellsAt(gardenShape, row, column).map((cell) => boardIndex(cell.row, cell.column));
+  placedIndices.forEach((index) => {
+    placedBoard[index] = piece.tone;
   });
+  let itemBoard = game.itemBoard ? [...game.itemBoard] : game.mode === 'items'
+    ? Array.from<GardenItem | null>({ length: BOARD_SIZE * BOARD_SIZE }).fill(null)
+    : undefined;
+  if (game.mode === 'items' && itemBoard && random.next() < ITEM_SPAWN_CHANCE) {
+    const itemIndex = placedIndices[Math.min(placedIndices.length - 1, Math.floor(random.next() * placedIndices.length))];
+    itemBoard[itemIndex] = chooseGardenItem(random);
+  }
   const completed = completedLines(placedBoard);
   const clearedNow = completed.rows.length + completed.columns.length;
   const board = [...placedBoard];
-  completed.cells.forEach((index) => { board[index] = null; });
+  const collectedItems = itemBoard
+    ? completed.cells.map((index) => itemBoard?.[index]).filter((item): item is GardenItem => item !== null && item !== undefined)
+    : [];
+  const inventory = { ...(game.inventory ?? EMPTY_GARDEN_INVENTORY) };
+  collectedItems.forEach((item) => {
+    if (item !== 'stone') inventory[item] += 1;
+  });
+  completed.cells.forEach((index) => {
+    if (board[index] !== 'stone') board[index] = null;
+    if (itemBoard) itemBoard[index] = null;
+  });
   const combo = clearedNow ? game.combo + 1 : 0;
   const lastGain = placementScore(gardenShape.cells.length, clearedNow, combo);
+  const nextClearedLines = game.clearedLines + clearedNow;
+  const stoneModePenalty = game.mode === 'stone'
+    ? Math.floor(nextClearedLines / STONE_LINE_INTERVAL) - Math.floor(game.clearedLines / STONE_LINE_INTERVAL)
+    : 0;
+  const stonesAdded = addPermanentStones(
+    board,
+    itemBoard,
+    stoneModePenalty + collectedItems.filter((item) => item === 'stone').length,
+    random
+  );
   let tray = game.tray.map((item, index) => index === trayIndex ? null : item);
   let nextPiece = game.nextPiece;
   if (tray.every((item) => item === null)) {
     const upcoming = nextPiece ?? createGardenPreview(board, random);
-    tray = [upcoming, ...createGardenTray(board, random).slice(0, 2)];
+    tray = createGardenRefillTray(board, random, upcoming);
     nextPiece = createGardenPreview(board, random);
   }
-  const status = anyTrayPieceFits(board, tray) ? 'playing' : 'game-over';
+  const nextGame: GardenGame = {
+    ...game,
+    board,
+    tray,
+    nextPiece,
+    itemBoard,
+    inventory: game.mode === 'items' ? inventory : undefined,
+    lastCollectedItems: collectedItems,
+    lastStonesAdded: stonesAdded,
+    score: game.score + lastGain,
+    clearedLines: nextClearedLines,
+    combo,
+    turns: game.turns + 1,
+    lastCleared: completed.cells.filter((index) => placedBoard[index] !== 'stone'),
+    lastGain,
+    maxLinesInMove: Math.max(game.maxLinesInMove ?? 0, clearedNow),
+    maxComboInGame: Math.max(game.maxComboInGame ?? 0, combo),
+    status: 'playing',
+    updatedAt: now.toISOString()
+  };
+  nextGame.status = gardenGameCanContinue(nextGame) ? 'playing' : 'game-over';
 
   return {
     placed: true,
     clearedNow,
-    game: {
-      ...game,
-      board,
-      tray,
-      nextPiece,
-      score: game.score + lastGain,
-      clearedLines: game.clearedLines + clearedNow,
-      combo,
-      turns: game.turns + 1,
-      lastCleared: completed.cells,
-      lastGain,
-      maxLinesInMove: Math.max(game.maxLinesInMove ?? 0, clearedNow),
-      maxComboInGame: Math.max(game.maxComboInGame ?? 0, combo),
-      status,
-      updatedAt: now.toISOString()
-    }
+    collectedItems,
+    stonesAdded,
+    game: nextGame
   };
+};
+
+export const rotateGardenPiece = (game: GardenGame, trayIndex: number, now = new Date()): GardenGame | null => {
+  const piece = game.tray[trayIndex];
+  if (game.status !== 'playing' || !piece || !game.inventory?.rotate || !pieceCanRotate(piece)) return null;
+  const tray = game.tray.map((item, index) => index === trayIndex
+    ? { ...piece, rotation: (((piece.rotation ?? 0) + 1) % 4) as GardenPiece['rotation'] }
+    : item);
+  const next: GardenGame = {
+    ...game,
+    tray,
+    inventory: { ...game.inventory, rotate: game.inventory.rotate - 1 },
+    lastCollectedItems: [],
+    lastStonesAdded: 0,
+    updatedAt: now.toISOString()
+  };
+  next.status = gardenGameCanContinue(next) ? 'playing' : 'game-over';
+  return next;
+};
+
+export const rerollGardenPiece = (
+  game: GardenGame,
+  trayIndex: number,
+  random: RandomSource,
+  now = new Date()
+): GardenGame | null => {
+  const piece = game.tray[trayIndex];
+  if (game.status !== 'playing' || !piece || !game.inventory?.reroll) return null;
+  let replacement = createGardenPreview(game.board, random);
+  for (let attempt = 0; attempt < 4 && replacement.shapeId === piece.shapeId; attempt += 1) {
+    replacement = createGardenPreview(game.board, random);
+  }
+  const tray = game.tray.map((item, index) => index === trayIndex ? replacement : item);
+  const next: GardenGame = {
+    ...game,
+    tray,
+    inventory: { ...game.inventory, reroll: game.inventory.reroll - 1 },
+    lastCollectedItems: [],
+    lastStonesAdded: 0,
+    status: 'playing',
+    updatedAt: now.toISOString()
+  };
+  return next;
+};
+
+export const useGardenBomb = (game: GardenGame, row: number, column: number, now = new Date()): GardenGame | null => {
+  if (game.status !== 'playing' || !game.inventory?.bomb) return null;
+  const startRow = Math.min(BOARD_SIZE - 2, Math.max(0, row));
+  const startColumn = Math.min(BOARD_SIZE - 2, Math.max(0, column));
+  const targets = [
+    boardIndex(startRow, startColumn), boardIndex(startRow, startColumn + 1),
+    boardIndex(startRow + 1, startColumn), boardIndex(startRow + 1, startColumn + 1)
+  ].filter((index) => game.board[index] !== null && game.board[index] !== 'stone');
+  if (!targets.length) return null;
+  const board = [...game.board];
+  const itemBoard = game.itemBoard ? [...game.itemBoard] : undefined;
+  targets.forEach((index) => {
+    board[index] = null;
+    if (itemBoard) itemBoard[index] = null;
+  });
+  const next: GardenGame = {
+    ...game,
+    board,
+    itemBoard,
+    inventory: { ...game.inventory, bomb: game.inventory.bomb - 1 },
+    combo: 0,
+    lastCleared: targets,
+    lastGain: 0,
+    lastCollectedItems: [],
+    lastStonesAdded: 0,
+    status: 'playing',
+    updatedAt: now.toISOString()
+  };
+  next.status = gardenGameCanContinue(next) ? 'playing' : 'game-over';
+  return next;
 };
 
 export const occupiedPercent = (board: readonly GardenCell[]): number =>

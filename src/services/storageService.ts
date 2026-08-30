@@ -11,7 +11,8 @@ export const LEARNING_RECORD_KEYS = [
   'numbercal.story.records.v1',
   'numbercal.balance.records.v1',
   'numbercal.number-path.records.v1',
-  'numbercal.block-garden.records.v1'
+  'numbercal.block-garden.records.v1',
+  'numbercal.growth.v1'
 ] as const;
 export type LearningRecordKey = typeof LEARNING_RECORD_KEYS[number];
 const HISTORY_KEY: LearningRecordKey = LEARNING_RECORD_KEYS[0];

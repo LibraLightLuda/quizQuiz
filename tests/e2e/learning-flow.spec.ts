@@ -235,6 +235,7 @@ test('수학 쉬움 5문제를 풀고 결과의 오답 복습과 저장 기록�
     }
   }
   await expect(page.getByRole('heading', { name: '4 / 5' })).toBeVisible({ timeout: 3000 });
+  await expect(page.getByLabel('이번 성장 점수')).toContainText('+10 성장 점수');
   await expect(page.locator('.review-card')).toHaveCount(1);
   const reviewCard = page.locator('.review-card').first();
   await expect(reviewCard).toContainText(reviewPrompt);
@@ -245,6 +246,36 @@ test('수학 쉬움 5문제를 풀고 결과의 오답 복습과 저장 기록�
   expect(stored.sessions[0].totalCount).toBe(5);
   expect(stored.sessions[0].incorrectCount).toBe(1);
   expect(stored.sessions[0].reviewItems).toBeUndefined();
+  const growth = await page.evaluate(() => JSON.parse(localStorage.getItem('numbercal.growth.v1') ?? '{}'));
+  expect(growth.totalXp).toBe(10);
+  expect(growth.days[0].completedSections).toEqual(['math']);
+});
+
+test('성장 점수가 레벨 경계를 넘으면 축하하고 성장 숲에 반영한다', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => {
+    localStorage.setItem('numbercal.growth.v1', JSON.stringify({
+      schemaVersion: 1,
+      totalXp: 30,
+      days: [
+        { dateKey: '2026-08-26', completedSections: ['story'], earnedXp: 10, weeklyBonusXp: 0 },
+        { dateKey: '2026-08-27', completedSections: ['memory'], earnedXp: 10, weeklyBonusXp: 0 },
+        { dateKey: '2026-08-28', completedSections: ['sudoku'], earnedXp: 10, weeklyBonusXp: 0 }
+      ]
+    }));
+  });
+  await page.reload();
+  await page.getByRole('button', { name: /수학 더하고/ }).click();
+  await page.getByRole('button', { name: /^덧셈 / }).click();
+  await page.getByRole('button', { name: /작은 모험 시작/ }).click();
+  await finishWithFirstChoices(page);
+  await expect(page.getByRole('dialog').getByRole('heading', { name: '레벨 2' })).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: '계속하기' }).click();
+  await page.getByRole('button', { name: '처음으로' }).click();
+  await expect(page.getByRole('button', { name: /성장 숲 열기, 레벨 2/ })).toBeVisible();
+  await page.getByRole('button', { name: /성장 숲 열기, 레벨 2/ }).click();
+  await expect(page.getByRole('heading', { name: '레벨 2' })).toBeVisible();
+  await expect(page.getByLabel('오늘 완료한 9개 섹션')).toContainText('수학');
 });
 
 test('영어 오답은 세 문제 간격 뒤 다시 나오고 숙련도에 저장된다', async ({ page }) => {

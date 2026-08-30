@@ -103,6 +103,7 @@ describe('로컬 저장', () => {
     localStorage.setItem('numbercal.story.records.v1', '{}');
     localStorage.setItem('numbercal.balance.records.v1', '{}');
     localStorage.setItem('numbercal.number-path.records.v1', '{}');
+    localStorage.setItem('numbercal.growth.v1', '{}');
     localStorage.setItem('numbercal.balance.progress.v1', '{"playing":true}');
     localStorage.setItem('numbercal.number-path.progress.v1', '{"playing":true}');
     localStorage.setItem('numbercal.settings.v1', JSON.stringify(DEFAULT_SETTINGS));
@@ -111,6 +112,7 @@ describe('로컬 저장', () => {
     expect(localStorage.getItem('numbercal.skill-mastery.v2')).toBeNull();
     expect(localStorage.getItem('numbercal.balance.records.v1')).toBeNull();
     expect(localStorage.getItem('numbercal.number-path.records.v1')).toBeNull();
+    expect(localStorage.getItem('numbercal.growth.v1')).toBeNull();
     expect(localStorage.getItem('numbercal.balance.progress.v1')).not.toBeNull();
     expect(localStorage.getItem('numbercal.number-path.progress.v1')).not.toBeNull();
     expect(localStorage.getItem('numbercal.settings.v1')).not.toBeNull();

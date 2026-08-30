@@ -1,4 +1,7 @@
-import { BOARD_SIZE, type GardenCell, type GardenGame, type GardenPiece, type GardenRecords, type GardenTone } from './types';
+import {
+  BOARD_SIZE, type GardenCell, type GardenGame, type GardenItem, type GardenMode, type GardenPiece,
+  type GardenRecords, type GardenTone
+} from './types';
 import { GARDEN_TONES, shapeById } from './blockGardenRules';
 
 export const GARDEN_RECORDS_KEY = 'numbercal.block-garden.records.v1';
@@ -21,14 +24,18 @@ const isNonNegativeInteger = (value: unknown): value is number =>
 
 const isTone = (value: unknown): value is GardenTone => GARDEN_TONES.includes(value as GardenTone);
 
-const isCell = (value: unknown): value is GardenCell => value === null || isTone(value);
+const isCell = (value: unknown): value is GardenCell => value === null || value === 'stone' || isTone(value);
+const GARDEN_MODES: readonly GardenMode[] = ['classic', 'daily', 'timed', 'stone', 'items'];
+const GARDEN_ITEMS: readonly GardenItem[] = ['bomb', 'rotate', 'reroll', 'stone'];
+const isItem = (value: unknown): value is GardenItem => GARDEN_ITEMS.includes(value as GardenItem);
 
 const isPiece = (value: unknown): value is GardenPiece => {
   if (!value || typeof value !== 'object') return false;
   const piece = value as Partial<GardenPiece>;
   return typeof piece.uid === 'string' && piece.uid.length > 0
     && typeof piece.shapeId === 'string' && Boolean(shapeById(piece.shapeId))
-    && isTone(piece.tone);
+    && isTone(piece.tone)
+    && (piece.rotation === undefined || piece.rotation === 0 || piece.rotation === 1 || piece.rotation === 2 || piece.rotation === 3);
 };
 
 const isRecords = (value: unknown): value is GardenRecords => {
@@ -45,7 +52,9 @@ const isRecords = (value: unknown): value is GardenRecords => {
       && records.dailyCompletedDates.every((date) => typeof date === 'string')))
     && (records.weeklyKey === undefined || typeof records.weeklyKey === 'string')
     && (records.weeklyLines === undefined || isNonNegativeInteger(records.weeklyLines))
-    && (records.weeklyMultiClears === undefined || isNonNegativeInteger(records.weeklyMultiClears));
+    && (records.weeklyMultiClears === undefined || isNonNegativeInteger(records.weeklyMultiClears))
+    && (records.modeHighScores === undefined || (typeof records.modeHighScores === 'object' && records.modeHighScores !== null
+      && Object.entries(records.modeHighScores).every(([mode, score]) => GARDEN_MODES.includes(mode as GardenMode) && isNonNegativeInteger(score))));
 };
 
 const isProgress = (value: unknown): value is GardenGame => {
@@ -55,10 +64,18 @@ const isProgress = (value: unknown): value is GardenGame => {
     && Array.isArray(game.board) && game.board.length === BOARD_SIZE * BOARD_SIZE && game.board.every(isCell)
     && Array.isArray(game.tray) && game.tray.length === 3 && game.tray.every((piece) => piece === null || isPiece(piece))
     && (game.nextPiece === undefined || game.nextPiece === null || isPiece(game.nextPiece))
-    && (game.mode === undefined || game.mode === 'classic' || game.mode === 'daily')
+    && (game.mode === undefined || GARDEN_MODES.includes(game.mode))
     && (game.dailyDate === undefined || typeof game.dailyDate === 'string')
     && (game.dailyTargetLines === undefined || isNonNegativeInteger(game.dailyTargetLines))
     && (game.dailyCompleted === undefined || typeof game.dailyCompleted === 'boolean')
+    && (game.timedEndsAt === undefined || (typeof game.timedEndsAt === 'string' && !Number.isNaN(Date.parse(game.timedEndsAt))))
+    && (game.timeLimitSeconds === undefined || isNonNegativeInteger(game.timeLimitSeconds))
+    && (game.itemBoard === undefined || (Array.isArray(game.itemBoard) && game.itemBoard.length === BOARD_SIZE * BOARD_SIZE
+      && game.itemBoard.every((item) => item === null || isItem(item))))
+    && (game.inventory === undefined || (isNonNegativeInteger(game.inventory.bomb)
+      && isNonNegativeInteger(game.inventory.rotate) && isNonNegativeInteger(game.inventory.reroll)))
+    && (game.lastCollectedItems === undefined || (Array.isArray(game.lastCollectedItems) && game.lastCollectedItems.every(isItem)))
+    && (game.lastStonesAdded === undefined || isNonNegativeInteger(game.lastStonesAdded))
     && (game.randomState === undefined || isNonNegativeInteger(game.randomState))
     && isNonNegativeInteger(game.score) && isNonNegativeInteger(game.clearedLines)
     && isNonNegativeInteger(game.combo) && isNonNegativeInteger(game.turns)
@@ -128,6 +145,8 @@ const weekKey = (isoDate: string): string => {
 export const recordFinishedGardenGame = (records: GardenRecords, game: GardenGame): GardenRecords => {
   const key = `${game.updatedAt}:${game.turns}:${game.score}:${game.clearedLines}`;
   const duplicate = records.lastFinishedGameKey === key;
+  const mode = game.mode ?? 'classic';
+  const previousModeBest = records.modeHighScores?.[mode] ?? (mode === 'classic' ? records.highScore : 0);
   const currentWeek = weekKey(game.updatedAt);
   const sameWeek = records.weeklyKey === currentWeek;
   const dailyDates = [...(records.dailyCompletedDates ?? [])];
@@ -147,6 +166,10 @@ export const recordFinishedGardenGame = (records: GardenRecords, game: GardenGam
     weeklyKey: currentWeek,
     weeklyLines: (sameWeek ? records.weeklyLines ?? 0 : 0) + (duplicate ? 0 : game.clearedLines),
     weeklyMultiClears: (sameWeek ? records.weeklyMultiClears ?? 0 : 0)
-      + (duplicate ? 0 : game.maxLinesInMove && game.maxLinesInMove >= 2 ? 1 : 0)
+      + (duplicate ? 0 : game.maxLinesInMove && game.maxLinesInMove >= 2 ? 1 : 0),
+    modeHighScores: {
+      ...(records.modeHighScores ?? {}),
+      [mode]: Math.max(previousModeBest, game.score)
+    }
   };
 };

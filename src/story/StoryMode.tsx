@@ -19,6 +19,9 @@ import type {
 import type { SpeechRate } from '../domain/types';
 import { GuideCharacter } from '../visuals/GuideCharacter';
 import { storyCoverVisuals, storySceneVisuals } from '../visuals/visualAssets';
+import { useGrowth } from '../growth/GrowthContext';
+import { GrowthCelebration, GrowthRewardCard } from '../growth/GrowthUI';
+import type { GrowthAward } from '../growth/types';
 import './story.css';
 
 type StoryScreen = 'home' | 'reading' | 'activity' | 'recall' | 'result' | 'library';
@@ -53,6 +56,7 @@ export default function StoryMode({
   learnedWordIds: readonly string[];
   onMissionRecallCorrect?: (wordId: string, skillIds: readonly string[]) => void;
 }) {
+  const growth = useGrowth();
   const initialRecords = useMemo(() => loadStoryRecords(), []);
   const [records, setRecords] = useState<StoryRecords>(initialRecords);
   const [savedProgress, setSavedProgress] = useState<StoryProgress | null>(() => loadStoryProgress());
@@ -60,6 +64,7 @@ export default function StoryMode({
   const [screen, setScreen] = useState<StoryScreen>('home');
   const [selectedLevel, setSelectedLevel] = useState<StoryLevel>(initialRecords.lastLevel);
   const [result, setResult] = useState<StoryResult | null>(null);
+  const [growthAward, setGrowthAward] = useState<GrowthAward | null>(null);
   const [message, setMessage] = useState('');
   const [selectedSequenceId, setSelectedSequenceId] = useState<string | null>(null);
   const [inputLocked, setInputLocked] = useState(false);
@@ -298,9 +303,11 @@ export default function StoryMode({
   const completeStory = (completedProgress = progress) => {
     if (!completedProgress || completedProgress.activities.some((activity) => activity.status !== 'complete')) return;
     const completed = saveStoryCompletion(records, completedProgress);
+    const growthResult = growth.awardCompletion('story');
+    setGrowthAward(growthResult.award);
     setRecords(completed.records);
     setResult(completed.result);
-    if (!completed.saved || !clearStoryProgress()) setStorageWarning(true);
+    if (!completed.saved || !growthResult.saved || !clearStoryProgress()) setStorageWarning(true);
     setSavedProgress(null);
     setProgress(null);
     setScreen('result');
@@ -546,11 +553,13 @@ export default function StoryMode({
     const story = storyById(result.storyId)!;
     return (
       <main className="story-screen story-result-screen">
+        {growthAward && <GrowthCelebration award={growthAward} animationsEnabled={animationsEnabled} />}
         <div className={`story-result-cover ${animationsEnabled ? '' : 'still'}`} aria-hidden="true">{story.cover}</div>
         <p className="eyebrow">{result.daily ? '오늘의 이야기 완료!' : '이야기 탐험 성공!'}</p>
         <h1>{story.title}</h1>
         <div className="story-stars" aria-label={`별 ${result.stars}개`}>{[1, 2, 3].map((star) => <span key={star} className={star <= result.stars ? 'earned' : ''}>★</span>)}</div>
         <p className="story-result-message">{result.strengthMessage}</p>
+        {growthAward && <GrowthRewardCard award={growthAward} />}
         <p className="story-practice-note">{result.practiceMessage}</p>
         {result.missionVocabularyIds?.length ? (
           <aside className="story-mission-result">

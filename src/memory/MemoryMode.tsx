@@ -16,6 +16,9 @@ import { LearningIcon } from '../visuals/LearningIcon';
 import { MemoryCardVisual } from '../visuals/MemoryCardVisual';
 import { AchievementGrid } from '../visuals/AchievementGrid';
 import { getMemoryAchievementStatuses, getNewMemoryAchievementIds, memoryRecordSummary } from './memoryAchievements';
+import { useGrowth } from '../growth/GrowthContext';
+import { GrowthCelebration, GrowthRewardCard } from '../growth/GrowthUI';
+import type { GrowthAward } from '../growth/types';
 import './memory.css';
 
 type MemoryScreen = 'levels' | 'play' | 'result' | 'collection';
@@ -31,6 +34,7 @@ const categoryLabels = { math: '수', korean: '한', english: '영' } as const;
 const praiseMessages = ['멋진 연결이에요!', '기억력이 반짝!', '정확해요!', '아주 잘 찾았어요!'];
 
 function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMatched }: MemoryModeProps) {
+  const growth = useGrowth();
   const initialProgress = useMemo(() => loadMemoryProgress(), []);
   const [records, setRecords] = useState(() => loadMemoryRecords());
   const [savedProgress, setSavedProgress] = useState(initialProgress);
@@ -40,6 +44,7 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMat
   const [progress, setProgress] = useState<MemoryProgress | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [result, setResult] = useState<MemoryResult | null>(null);
+  const [growthAward, setGrowthAward] = useState<GrowthAward | null>(null);
   const [message, setMessage] = useState('서로 뜻이 통하는 카드 두 장을 찾아보세요.');
   const [locked, setLocked] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
@@ -121,9 +126,11 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMat
     const accuracy = completed.attempts ? Math.round((completed.correctAttempts / completed.attempts) * 100) : 100;
     const stars = calculateStars(pairCount, completed.attempts);
     const saved = saveMemoryCompletion(records, completed, finishTime, accuracy, stars);
+    const growthResult = growth.awardCompletion('memory');
+    setGrowthAward(growthResult.award);
     const newAchievementIds = getNewMemoryAchievementIds(records, saved.records);
     setRecords(saved.records);
-    if (!saved.saved || !clearMemoryProgress()) setStorageWarning(true);
+    if (!saved.saved || !growthResult.saved || !clearMemoryProgress()) setStorageWarning(true);
     setSavedProgress(null);
     setElapsedMs(finishTime);
     setResult({
@@ -271,10 +278,12 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMat
       .filter((achievement) => result.newAchievementIds.includes(achievement.id));
     return (
       <main className="screen memory-result-screen">
+        {growthAward && <GrowthCelebration award={growthAward} animationsEnabled={animationsEnabled} />}
         <div className="memory-result-burst" aria-hidden="true">🏆</div>
         <p className="eyebrow">모든 연결을 찾았어요!</p>
         <h1>{result.isBestTime || result.isBestAttempts ? '새로운 최고 기록!' : '기억력 챌린지 성공!'}</h1>
         <div className="memory-stars" aria-label={`${result.stars}개의 별 획득`}>{'★'.repeat(result.stars)}<span>{'★'.repeat(3 - result.stars)}</span></div>
+        {growthAward && <GrowthRewardCard award={growthAward} />}
         {result.earnedDailyBadge && <div className="daily-badge"><span>🌟</span><strong>오늘의 특별 배지</strong><small>매일 도전한 멋진 기억력 탐험가!</small></div>}
         {newAchievements.length > 0 && (
           <section className="memory-new-achievements" aria-label="새로 얻은 배지">

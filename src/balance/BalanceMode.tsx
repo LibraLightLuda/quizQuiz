@@ -28,6 +28,9 @@ import {
 } from './balanceStorage';
 import type { BalanceDifficulty, BalanceProgress, BalanceSide, BalanceWeight } from './types';
 import BalanceTutorial from './BalanceTutorial';
+import { useGrowth } from '../growth/GrowthContext';
+import { GrowthCelebration, GrowthRewardCard } from '../growth/GrowthUI';
+import type { GrowthAward } from '../growth/types';
 import './balance.css';
 
 type BalanceScreen = 'levels' | 'tutorial' | 'play' | 'result' | 'collection';
@@ -58,6 +61,7 @@ function FixedWeight({ value }: { value: number }) {
 const weightName = (weight: BalanceWeight) => weight.accessibleLabel ?? `${weight.value} 추`;
 
 function BalanceMode({ onExit, soundEnabled, animationsEnabled }: BalanceModeProps) {
+  const growth = useGrowth();
   const initialRecords = useMemo(() => loadBalanceRecords(), []);
   const initialSaved = useMemo(() => loadBalanceProgress(), []);
   const [records, setRecords] = useState(initialRecords);
@@ -68,6 +72,7 @@ function BalanceMode({ onExit, soundEnabled, animationsEnabled }: BalanceModePro
   const [selectedWeightId, setSelectedWeightId] = useState<string | null>(null);
   const [storageWarning, setStorageWarning] = useState(false);
   const [result, setResult] = useState<BalanceResult | null>(null);
+  const [growthAward, setGrowthAward] = useState<GrowthAward | null>(null);
   const [returnNotice, setReturnNotice] = useState(false);
   const completedSessions = useRef(new Set<string>());
   const progressRef = useRef<BalanceProgress | null>(null);
@@ -97,9 +102,11 @@ function BalanceMode({ onExit, soundEnabled, animationsEnabled }: BalanceModePro
     if (!progress || progress.phase !== 'finished' || completedSessions.current.has(progress.id)) return;
     completedSessions.current.add(progress.id);
     const saved = saveBalanceCompletion(records, progress);
+    const growthResult = growth.awardCompletion('balance');
+    setGrowthAward(growthResult.award);
     const newAchievementIds = getNewBalanceAchievementIds(records, saved.records);
     setRecords(saved.records);
-    if (!saved.saved || !clearBalanceProgress()) setStorageWarning(true);
+    if (!saved.saved || !growthResult.saved || !clearBalanceProgress()) setStorageWarning(true);
     setSavedProgress(null);
     setResult({
       difficulty: progress.difficulty,
@@ -286,10 +293,12 @@ function BalanceMode({ onExit, soundEnabled, animationsEnabled }: BalanceModePro
     const newAchievements = getBalanceAchievements(records).filter((item) => result.newAchievementIds.includes(item.id));
     return (
       <main className="screen balance-result-screen">
+        {growthAward && <GrowthCelebration award={growthAward} animationsEnabled={animationsEnabled} />}
         <div className="balance-result-icon"><BalanceIcon decorative /></div>
         <p className="eyebrow">{result.daily ? '오늘의 균형 완료!' : '다섯 저울을 모두 맞췄어요!'}</p>
         <h1>양쪽의 합이 같다는 걸 배웠어요</h1>
         <div className="balance-result-stars" aria-label="별 3개 획득">★★★</div>
+        {growthAward && <GrowthRewardCard award={growthAward} />}
         {result.earnedDailyBadge && <aside className="balance-daily-badge"><span>🏅</span><strong>오늘의 균형 배지</strong><small>오늘도 차근차근 생각해 냈어요!</small></aside>}
         {newAchievements.length > 0 && <section className="balance-new-achievements"><p>새 배지를 찾았어요!</p>{newAchievements.map((item) => <span key={item.id}><i>{item.icon}</i><strong>{item.title}</strong></span>)}</section>}
         {result.isBest && <p className="balance-best-note">새로운 방법으로 더 간단히 해결했어요!</p>}
