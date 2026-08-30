@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { SeededRandom } from '../services/randomService';
 import {
   anyTrayPieceFits, boardIndex, canPlaceShape, createGardenGame, createGardenTray, emptyGardenBoard,
-  occupiedPercent, placeGardenPiece, placementScore, shapeById, validPlacements
+  createGardenPreview, occupiedPercent, placeGardenPiece, placementScore, shapeById, validPlacements
 } from './blockGardenRules';
+import { BOARD_SIZE } from './types';
 import type { GardenGame, GardenPiece } from './types';
 
 const piece = (shapeId: string): GardenPiece => ({ uid: `test-${shapeId}`, shapeId, tone: 'leaf' });
@@ -86,5 +87,21 @@ describe('빈칸 정원 핵심 규칙', () => {
     expect(game.tray).toHaveLength(3);
     expect(new Set(game.tray.map((item) => item?.shapeId)).size).toBe(3);
     expect(game.status).toBe('playing');
+    expect(game.nextPiece).toBeTruthy();
+  });
+
+  it('현재 묶음을 모두 쓰면 미리 본 조각이 다음 묶음 첫 칸으로 들어온다', () => {
+    const random = new SeededRandom(22);
+    const initial = createGardenGame(random);
+    const expectedNext = initial.nextPiece?.shapeId;
+    let game = initial;
+    for (let slot = 0; slot < 3; slot += 1) {
+      const piece = game.tray[slot];
+      if (!piece) continue;
+      const placement = validPlacements(game.board, shapeById(piece.shapeId)!)[0];
+      game = placeGardenPiece(game, slot, Math.floor(placement / BOARD_SIZE), placement % BOARD_SIZE, random).game;
+    }
+    expect(game.tray[0]?.shapeId).toBe(expectedNext);
+    expect(createGardenPreview(game.board, random)).toBeTruthy();
   });
 });

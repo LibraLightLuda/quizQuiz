@@ -172,6 +172,42 @@ test('키보드만으로 조각을 고르고 놓을 수 있다', async ({ page }
   await expect(page.locator('.garden-play-header > div').first().locator('strong')).not.toHaveText('0');
 });
 
+test('다음 새싹을 보여 주고 오늘의 정원 목표를 완료한다', async ({ page }) => {
+  const board = Array.from({ length: 64 }, () => null as string | null);
+  for (let column = 0; column < 5; column += 1) board[column] = 'leaf';
+  await page.addInitScript((value) => localStorage.setItem('numbercal.block-garden.progress.v1', JSON.stringify(value)), {
+    schemaVersion: 1,
+    board,
+    tray: [
+      { uid: 'daily-line-piece', shapeId: 'line-3-h', tone: 'sun' },
+      { uid: 'daily-seed', shapeId: 'seed', tone: 'water' },
+      null
+    ],
+    nextPiece: { uid: 'daily-next', shapeId: 'pair-h', tone: 'berry' },
+    mode: 'daily',
+    dailyDate: '2026-08-30',
+    dailyTargetLines: 1,
+    dailyCompleted: false,
+    randomState: 123,
+    score: 0,
+    clearedLines: 0,
+    combo: 0,
+    turns: 0,
+    lastCleared: [],
+    lastGain: 0,
+    maxLinesInMove: 0,
+    status: 'playing',
+    updatedAt: '2026-08-30T00:00:00.000Z'
+  });
+  await openGarden(page);
+  await page.getByRole('button', { name: '이어 하던 정원 열기' }).click();
+  await expect(page.getByRole('region', { name: '다음에 나올 조각' })).toBeVisible();
+  await page.getByRole('button', { name: '가로 세 칸' }).click();
+  await page.getByRole('gridcell', { name: '1행 7열, 빈칸' }).click();
+  await expect(page.getByRole('heading', { name: '오늘의 정원 완성!' })).toBeVisible();
+  await expect(page.getByText(/오늘의 씨앗을 모두 피웠어요/)).toBeVisible();
+});
+
 test('브라우저 저장소가 막혀도 놀이를 계속하고 저장 실패를 알린다', async ({ page }) => {
   await page.addInitScript(() => {
     Storage.prototype.setItem = () => { throw new DOMException('blocked', 'QuotaExceededError'); };

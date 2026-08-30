@@ -8,7 +8,12 @@ export const EMPTY_GARDEN_RECORDS: GardenRecords = {
   schemaVersion: 1,
   highScore: 0,
   bestLines: 0,
-  gamesPlayed: 0
+  gamesPlayed: 0,
+  bestCombo: 0,
+  maxLinesInMove: 0,
+  dailyCompletedDates: [],
+  weeklyLines: 0,
+  weeklyMultiClears: 0
 };
 
 const isNonNegativeInteger = (value: unknown): value is number =>
@@ -33,7 +38,14 @@ const isRecords = (value: unknown): value is GardenRecords => {
     && isNonNegativeInteger(records.highScore)
     && isNonNegativeInteger(records.bestLines)
     && isNonNegativeInteger(records.gamesPlayed)
-    && (records.lastFinishedGameKey === undefined || typeof records.lastFinishedGameKey === 'string');
+    && (records.lastFinishedGameKey === undefined || typeof records.lastFinishedGameKey === 'string')
+    && (records.bestCombo === undefined || isNonNegativeInteger(records.bestCombo))
+    && (records.maxLinesInMove === undefined || isNonNegativeInteger(records.maxLinesInMove))
+    && (records.dailyCompletedDates === undefined || (Array.isArray(records.dailyCompletedDates)
+      && records.dailyCompletedDates.every((date) => typeof date === 'string')))
+    && (records.weeklyKey === undefined || typeof records.weeklyKey === 'string')
+    && (records.weeklyLines === undefined || isNonNegativeInteger(records.weeklyLines))
+    && (records.weeklyMultiClears === undefined || isNonNegativeInteger(records.weeklyMultiClears));
 };
 
 const isProgress = (value: unknown): value is GardenGame => {
@@ -42,10 +54,19 @@ const isProgress = (value: unknown): value is GardenGame => {
   return game.schemaVersion === 1
     && Array.isArray(game.board) && game.board.length === BOARD_SIZE * BOARD_SIZE && game.board.every(isCell)
     && Array.isArray(game.tray) && game.tray.length === 3 && game.tray.every((piece) => piece === null || isPiece(piece))
+    && (game.nextPiece === undefined || game.nextPiece === null || isPiece(game.nextPiece))
+    && (game.mode === undefined || game.mode === 'classic' || game.mode === 'daily')
+    && (game.dailyDate === undefined || typeof game.dailyDate === 'string')
+    && (game.dailyTargetLines === undefined || isNonNegativeInteger(game.dailyTargetLines))
+    && (game.dailyCompleted === undefined || typeof game.dailyCompleted === 'boolean')
+    && (game.randomState === undefined || isNonNegativeInteger(game.randomState))
     && isNonNegativeInteger(game.score) && isNonNegativeInteger(game.clearedLines)
     && isNonNegativeInteger(game.combo) && isNonNegativeInteger(game.turns)
     && Array.isArray(game.lastCleared) && game.lastCleared.every((index) => isNonNegativeInteger(index) && index < BOARD_SIZE * BOARD_SIZE)
-    && isNonNegativeInteger(game.lastGain) && game.status === 'playing'
+    && isNonNegativeInteger(game.lastGain)
+    && (game.maxLinesInMove === undefined || isNonNegativeInteger(game.maxLinesInMove))
+    && (game.maxComboInGame === undefined || isNonNegativeInteger(game.maxComboInGame))
+    && (game.status === 'playing' || game.status === 'game-over')
     && typeof game.updatedAt === 'string' && !Number.isNaN(Date.parse(game.updatedAt));
 };
 
@@ -95,13 +116,37 @@ export const clearGardenProgress = (): boolean => {
   }
 };
 
-export const recordFinishedGardenGame = (records: GardenRecords, game: GardenGame): GardenRecords => ({
-  ...records,
-  schemaVersion: 1,
-  highScore: Math.max(records.highScore, game.score),
-  bestLines: Math.max(records.bestLines, game.clearedLines),
-  gamesPlayed: records.lastFinishedGameKey === `${game.updatedAt}:${game.turns}:${game.score}:${game.clearedLines}`
-    ? records.gamesPlayed
-    : records.gamesPlayed + 1,
-  lastFinishedGameKey: `${game.updatedAt}:${game.turns}:${game.score}:${game.clearedLines}`
-});
+const weekKey = (isoDate: string): string => {
+  const date = new Date(isoDate);
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((date.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+};
+
+export const recordFinishedGardenGame = (records: GardenRecords, game: GardenGame): GardenRecords => {
+  const key = `${game.updatedAt}:${game.turns}:${game.score}:${game.clearedLines}`;
+  const duplicate = records.lastFinishedGameKey === key;
+  const currentWeek = weekKey(game.updatedAt);
+  const sameWeek = records.weeklyKey === currentWeek;
+  const dailyDates = [...(records.dailyCompletedDates ?? [])];
+  if (game.mode === 'daily' && game.dailyCompleted && game.dailyDate && !dailyDates.includes(game.dailyDate)) {
+    dailyDates.push(game.dailyDate);
+  }
+  return {
+    ...records,
+    schemaVersion: 1,
+    highScore: Math.max(records.highScore, game.score),
+    bestLines: Math.max(records.bestLines, game.clearedLines),
+    gamesPlayed: duplicate ? records.gamesPlayed : records.gamesPlayed + 1,
+    lastFinishedGameKey: key,
+    bestCombo: Math.max(records.bestCombo ?? 0, game.maxComboInGame ?? game.combo),
+    maxLinesInMove: Math.max(records.maxLinesInMove ?? 0, game.maxLinesInMove ?? (game.lastCleared.length > 0 ? 1 : 0)),
+    dailyCompletedDates: dailyDates,
+    weeklyKey: currentWeek,
+    weeklyLines: (sameWeek ? records.weeklyLines ?? 0 : 0) + (duplicate ? 0 : game.clearedLines),
+    weeklyMultiClears: (sameWeek ? records.weeklyMultiClears ?? 0 : 0)
+      + (duplicate ? 0 : game.maxLinesInMove && game.maxLinesInMove >= 2 ? 1 : 0)
+  };
+};

@@ -35,7 +35,13 @@ describe('빈칸 정원 저장', () => {
       highScore: 420,
       bestLines: 9,
       gamesPlayed: 1,
-      lastFinishedGameKey: `${game.updatedAt}:${game.turns}:${game.score}:${game.clearedLines}`
+      lastFinishedGameKey: `${game.updatedAt}:${game.turns}:${game.score}:${game.clearedLines}`,
+      bestCombo: 0,
+      maxLinesInMove: 0,
+      dailyCompletedDates: [],
+      weeklyKey: '2026-W35',
+      weeklyLines: 9,
+      weeklyMultiClears: 0
     });
     expect(recordFinishedGardenGame(recordFinishedGardenGame(EMPTY_GARDEN_RECORDS, game), game).gamesPlayed).toBe(1);
     localStorage.setItem(GARDEN_PROGRESS_KEY, '{}');

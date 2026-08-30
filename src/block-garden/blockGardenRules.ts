@@ -1,5 +1,5 @@
 import type { RandomSource } from '../services/randomService';
-import { BOARD_SIZE, type GardenCell, type GardenGame, type GardenPiece, type GardenShape, type GardenTone, type PlacementResult, type Point } from './types';
+import { BOARD_SIZE, type GardenCell, type GardenGame, type GardenMode, type GardenPiece, type GardenShape, type GardenTone, type PlacementResult, type Point } from './types';
 
 const shape = (id: string, label: string, weight: number, cells: GardenShape['cells']): GardenShape => ({ id, label, weight, cells });
 
@@ -103,6 +103,12 @@ const createPiece = (gardenShape: GardenShape, tone: GardenTone): GardenPiece =>
   tone
 });
 
+export const createGardenPreview = (board: readonly GardenCell[], random: RandomSource): GardenPiece => {
+  const fitting = GARDEN_SHAPES.filter((candidate) => validPlacements(board, candidate).length > 0);
+  const candidate = chooseWeightedShape(random, board, fitting.length ? fitting : GARDEN_SHAPES);
+  return createPiece(candidate, GARDEN_TONES[Math.floor(random.next() * GARDEN_TONES.length)]);
+};
+
 export const createGardenTray = (board: readonly GardenCell[], random: RandomSource): GardenPiece[] => {
   const selected: GardenShape[] = [];
   for (let slot = 0; slot < 3; slot += 1) {
@@ -121,18 +127,29 @@ export const createGardenTray = (board: readonly GardenCell[], random: RandomSou
   ));
 };
 
-export const createGardenGame = (random: RandomSource, now = new Date()): GardenGame => {
+export const createGardenGame = (
+  random: RandomSource,
+  now = new Date(),
+  options: { mode?: GardenMode; dailyDate?: string; dailyTargetLines?: number } = {}
+): GardenGame => {
   const board = emptyGardenBoard();
   return {
     schemaVersion: 1,
     board,
     tray: createGardenTray(board, random),
+    nextPiece: createGardenPreview(board, random),
+    mode: options.mode ?? 'classic',
+    dailyDate: options.dailyDate,
+    dailyTargetLines: options.dailyTargetLines,
+    dailyCompleted: false,
     score: 0,
     clearedLines: 0,
     combo: 0,
     turns: 0,
     lastCleared: [],
     lastGain: 0,
+    maxLinesInMove: 0,
+    maxComboInGame: 0,
     status: 'playing',
     updatedAt: now.toISOString()
   };
@@ -182,7 +199,12 @@ export const placeGardenPiece = (
   const combo = clearedNow ? game.combo + 1 : 0;
   const lastGain = placementScore(gardenShape.cells.length, clearedNow, combo);
   let tray = game.tray.map((item, index) => index === trayIndex ? null : item);
-  if (tray.every((item) => item === null)) tray = createGardenTray(board, random);
+  let nextPiece = game.nextPiece;
+  if (tray.every((item) => item === null)) {
+    const upcoming = nextPiece ?? createGardenPreview(board, random);
+    tray = [upcoming, ...createGardenTray(board, random).slice(0, 2)];
+    nextPiece = createGardenPreview(board, random);
+  }
   const status = anyTrayPieceFits(board, tray) ? 'playing' : 'game-over';
 
   return {
@@ -192,12 +214,15 @@ export const placeGardenPiece = (
       ...game,
       board,
       tray,
+      nextPiece,
       score: game.score + lastGain,
       clearedLines: game.clearedLines + clearedNow,
       combo,
       turns: game.turns + 1,
       lastCleared: completed.cells,
       lastGain,
+      maxLinesInMove: Math.max(game.maxLinesInMove ?? 0, clearedNow),
+      maxComboInGame: Math.max(game.maxComboInGame ?? 0, combo),
       status,
       updatedAt: now.toISOString()
     }

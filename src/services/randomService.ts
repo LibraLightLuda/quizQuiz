@@ -20,6 +20,10 @@ export class SeededRandom implements RandomSource {
     this.state = seed >>> 0 || 1;
   }
 
+  getState(): number {
+    return this.state;
+  }
+
   next(): number {
     this.state = (this.state * 1664525 + 1013904223) >>> 0;
     return this.state / 0x1_0000_0000;
