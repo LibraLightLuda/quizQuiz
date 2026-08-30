@@ -28,6 +28,7 @@ import { ConceptPicture } from '../visuals/ConceptPicture';
 import { questionConceptIds } from '../visuals/visualAssets';
 import { BalanceIcon } from '../visuals/BalanceIcon';
 import { NumberPathIcon } from '../visuals/NumberPathIcon';
+import { ShapeBlockIcon } from '../visuals/ShapeBlockIcon';
 import { GrowthDashboard } from './GrowthDashboard';
 import '../styles/global.css';
 
@@ -37,6 +38,7 @@ const MemoryMode = lazy(() => import('../memory/MemoryMode'));
 const StoryMode = lazy(() => import('../story/StoryMode'));
 const BalanceMode = lazy(() => import('../balance/BalanceMode'));
 const NumberPathMode = lazy(() => import('../number-path/NumberPathMode'));
+const ShapeBlockMode = lazy(() => import('../shape-block/ShapeBlockMode'));
 const praiseMessages = ['잘했어요!', '정답이에요!', '대단해요!', '멋져요!', '최고예요!', '한 문제 더!'];
 const gentleMessages = ['같이 찾아볼까요?', '다른 친구도 만나봐요!', '천천히 다시 볼까요?', '모리가 함께할게요!'];
 const makeMessagePicker = (values: readonly string[]) => {
@@ -76,12 +78,13 @@ const dailyCompleted = (storageKey: string, dateKey: string): boolean => {
   }
 };
 
-const recommendedDailyMode = (): 'story' | 'balance' | 'number-path' => {
+const recommendedDailyMode = (): 'story' | 'balance' | 'number-path' | 'shape-block' => {
   const dateKey = localDateKey();
   const modes = [
     { mode: 'story' as const, done: dailyCompleted('numbercal.story.records.v1', dateKey) },
     { mode: 'balance' as const, done: dailyCompleted('numbercal.balance.records.v1', dateKey) },
-    { mode: 'number-path' as const, done: dailyCompleted('numbercal.number-path.records.v1', dateKey) }
+    { mode: 'number-path' as const, done: dailyCompleted('numbercal.number-path.records.v1', dateKey) },
+    { mode: 'shape-block' as const, done: dailyCompleted('numbercal.shape-block.records.v1', dateKey) }
   ];
   const incomplete = modes.filter((item) => !item.done);
   const choices = incomplete.length ? incomplete : modes;
@@ -119,6 +122,8 @@ function App() {
   const [storyOpen, setStoryOpen] = useState(false);
   const [balanceOpen, setBalanceOpen] = useState(false);
   const [numberPathOpen, setNumberPathOpen] = useState(false);
+  const [shapeBlockOpen, setShapeBlockOpen] = useState(false);
+  const [shapeBlockDaily, setShapeBlockDaily] = useState(false);
   const [growthOpen, setGrowthOpen] = useState(false);
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [timerAnnouncement, setTimerAnnouncement] = useState('');
@@ -229,7 +234,12 @@ function App() {
     const requestToken = ++speechRequestToken.current;
     activeSpeechQuestion.current = question.id;
     setSpeechState('speaking');
-    const result = await speak(question.speech.text, question.speech.lang, slow ? 0.75 : state.settings.speechRate);
+    const rate = slow
+      ? 0.75
+      : question.speech.slowReplay
+        ? state.settings.speechRate
+        : 0.95;
+    const result = await speak(question.speech.text, question.speech.lang, rate);
     if (speechRequestToken.current !== requestToken || activeSpeechQuestion.current !== question.id) return result;
     speechLock.current = false;
     setSpeechState(result === 'ended' ? 'idle' : 'error');
@@ -529,7 +539,7 @@ function App() {
   };
 
   const replaySlowly = () => {
-    if (state.session?.currentQuestion.speech) void playSpeech(state.session.currentQuestion, true);
+    if (state.session?.currentQuestion.speech?.slowReplay) void playSpeech(state.session.currentQuestion, true);
   };
 
   const switchToFillQuestion = () => {
@@ -710,6 +720,22 @@ function App() {
     );
   }
 
+  if (shapeBlockOpen) {
+    return (
+      <div className={`app-shell ${activeAnimations ? '' : 'reduce-motion'}`}>
+        <Suspense fallback={<GameLoading />}>
+          <ShapeBlockMode
+            onExit={() => { setShapeBlockOpen(false); setShapeBlockDaily(false); }}
+            soundEnabled={state.settings.sound}
+            animationsEnabled={activeAnimations}
+            hapticsEnabled={state.settings.haptics && activeAnimations}
+            startDaily={shapeBlockDaily}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
   return (
     <div className={`app-shell ${activeAnimations ? '' : 'reduce-motion'}`}>
       {state.screen === 'home' && (
@@ -724,7 +750,7 @@ function App() {
             <GuideCharacter className="home-guide" decorative />
           </header>
           <section className="home-recommendation" aria-labelledby="today-recommendation-title">
-            <div><p className="eyebrow">오늘의 추천</p><h2 id="today-recommendation-title">{dailyRecommendation === 'story' ? '짧은 이야기 한 편 어때요?' : dailyRecommendation === 'balance' ? '오늘의 저울을 맞춰 볼까요?' : '오늘의 숫자 길을 찾아볼까요?'}</h2></div>
+            <div><p className="eyebrow">오늘의 추천</p><h2 id="today-recommendation-title">{dailyRecommendation === 'story' ? '짧은 이야기 한 편 어때요?' : dailyRecommendation === 'balance' ? '오늘의 저울을 맞춰 볼까요?' : dailyRecommendation === 'number-path' ? '오늘의 숫자 길을 찾아볼까요?' : '오늘의 모양을 만들어 볼까요?'}</h2></div>
             {dailyRecommendation === 'story' ? (
               <button onClick={() => setStoryOpen(true)} aria-label="오늘의 추천 이야기 탐험대 시작하기">
                 <span className="recommendation-icon"><LearningIcon name="story" /></span>
@@ -737,10 +763,16 @@ function App() {
                 <span><strong>균형 저울</strong><small>숫자 추를 놓아 양쪽 합을 맞춰요</small></span>
                 <b aria-hidden="true">시작 ›</b>
               </button>
-            ) : (
+            ) : dailyRecommendation === 'number-path' ? (
               <button onClick={() => setNumberPathOpen(true)} aria-label="오늘의 추천 숫자 길 찾기 시작하기">
                 <span className="recommendation-icon number-path-recommendation-icon"><NumberPathIcon decorative /></span>
                 <span><strong>숫자 길 찾기</strong><small>상하좌우로 이어 목표 합을 만들어요</small></span>
+                <b aria-hidden="true">시작 ›</b>
+              </button>
+            ) : (
+              <button onClick={() => { setShapeBlockDaily(true); setShapeBlockOpen(true); }} aria-label="오늘의 추천 모양블록 시작하기">
+                <span className="recommendation-icon shape-block-recommendation-icon"><ShapeBlockIcon decorative /></span>
+                <span><strong>오늘의 모양블록</strong><small>7개 조각으로 오늘의 그림을 만들어요</small></span>
                 <b aria-hidden="true">시작 ›</b>
               </button>
             )}
@@ -781,6 +813,11 @@ function App() {
             <button className="subject-card number-path" onClick={() => setNumberPathOpen(true)}>
               <span className="subject-icon" aria-hidden="true"><NumberPathIcon decorative /></span>
               <span className="subject-copy"><strong>숫자 길 찾기</strong><small>숫자를 이어 목표 합을 만들어요</small></span>
+              <span className="arrow" aria-hidden="true">›</span>
+            </button>
+            <button className="subject-card shape-block" onClick={() => { setShapeBlockDaily(false); setShapeBlockOpen(true); }}>
+              <span className="subject-icon" aria-hidden="true"><ShapeBlockIcon /></span>
+              <span className="subject-copy"><strong>모양블록</strong><small>조각을 돌리고 줄을 채워요</small></span>
               <span className="arrow" aria-hidden="true">›</span>
             </button>
             </div>
@@ -887,14 +924,14 @@ function App() {
               && (state.session.currentQuestion.kind !== 'listening' || state.session.questionStatus === 'feedback')
               && <ConceptPicture conceptId={questionConceptIds[state.session.currentQuestion.metadata.wordId]} className="question-concept-picture" />}
             {state.session.currentQuestion.hint && <p className="question-hint">{state.session.currentQuestion.hint}</p>}
-            {state.session.currentQuestion.kind === 'listening' && (
-              <div className="listen-actions">
+            {state.session.currentQuestion.speech && (
+              <div className={`listen-actions ${state.session.currentQuestion.speech.slowReplay ? '' : 'single'}`}>
                 <button className={`listen-button ${speechState === 'speaking' ? 'is-speaking' : ''}`} onClick={replay} disabled={speechState === 'speaking'}>
-                  <span aria-hidden="true">{speechState === 'speaking' ? '〰️' : '🔊'}</span>{speechState === 'speaking' ? '듣는 중...' : '다시 듣기'}
+                  <span aria-hidden="true">{speechState === 'speaking' ? '〰️' : '🔊'}</span>{speechState === 'speaking' ? '듣는 중...' : state.session.currentQuestion.speech.slowReplay ? '문장 다시 듣기' : '다시 듣기'}
                 </button>
-                <button className="slow-listen-button" onClick={replaySlowly} disabled={speechState === 'speaking'}>
-                  <span aria-hidden="true">🐢</span>느리게 다시 듣기
-                </button>
+                {state.session.currentQuestion.speech.slowReplay && <button className="slow-listen-button" onClick={replaySlowly} disabled={speechState === 'speaking'}>
+                  <span aria-hidden="true">🐢</span>느리게 문장 듣기
+                </button>}
               </div>
             )}
             {speechState === 'error' && state.session.currentQuestion.kind === 'listening' && <div className="speech-fallback"><p className="inline-notice">소리가 나지 않나요?</p><button className="small-button" onClick={switchToFillQuestion}>글자 문제로 바꾸기</button></div>}
@@ -1016,7 +1053,8 @@ function App() {
           <TopBar title="설정" onBack={() => dispatch({ type: 'CLOSE_SETTINGS' })} />
           <section className="settings-panel">
             <ToggleRow icon="♪" label="효과음" detail="정답을 맞히면 짧은 소리가 나요" checked={state.settings.sound} onChange={(sound) => updateSettings({ sound })} />
-            <ToggleRow icon="🔊" label="듣기 음성" detail="한국어와 영어 단어를 들려줘요" checked={state.settings.tts} onChange={(tts) => { if (!tts) cancelActiveSpeech(); updateSettings({ tts }); }} />
+            <ToggleRow icon="〰" label="손끝 반응" detail="지원하는 기기에서 짧게 톡 느껴져요" checked={state.settings.haptics} onChange={(haptics) => updateSettings({ haptics })} />
+            <ToggleRow icon="🔊" label="듣기 음성" detail="한국어·영어 단어와 문장을 읽어줘요" checked={state.settings.tts} onChange={(tts) => { if (!tts) cancelActiveSpeech(); updateSettings({ tts }); }} />
             {state.settings.tts && <SpeechRatePicker value={state.settings.speechRate} onChange={(speechRate) => { cancelActiveSpeech(); updateSettings({ speechRate }); }} />}
             <ToggleRow icon="✨" label="반짝이는 효과" detail="별과 축하 효과를 보여줘요" checked={state.settings.animations} onChange={(animations) => updateSettings({ animations })} />
           </section>
@@ -1092,7 +1130,7 @@ function SpeechRatePicker({ value, onChange }: { value: SpeechRate; onChange: (v
   ];
   return (
     <fieldset className="speech-rate-picker">
-      <legend><strong>읽기 속도</strong><small>아이에게 편안한 속도를 골라요</small></legend>
+      <legend><strong>문장 읽기 속도</strong><small>문장과 이야기 듣기에 적용돼요</small></legend>
       <div role="radiogroup" aria-label="읽기 속도">
         {choices.map((choice) => (
           <button

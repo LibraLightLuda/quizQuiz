@@ -138,7 +138,15 @@ export const generateLanguageActivityQuestion = (context: ActivityContext): Ques
   const copy = questionCopy(target, activity, korean);
   const speech = activity === 'sound-match'
     ? { text: target.word, lang: korean ? 'ko-KR' as const : 'en-US' as const }
-    : undefined;
+    : activity === 'sentence-complete'
+      ? {
+          text: korean
+            ? copy.prompt
+            : 'Complete the sentence. Choose the word that matches the meaning.',
+          lang: korean ? 'ko-KR' as const : 'en-US' as const,
+          slowReplay: true
+        }
+      : undefined;
   const correctChunks = activity === 'word-build' ? wordChunks(target.word, korean) : [];
   const distractorChunk = activity === 'word-build'
     ? shuffle(context.random, distractors.flatMap((word) => wordChunks(word.word, korean)))

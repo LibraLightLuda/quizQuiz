@@ -19,7 +19,8 @@ const transferFile = JSON.stringify({
     'numbercal.memory.records.v1': null,
     'numbercal.story.records.v1': null,
     'numbercal.balance.records.v1': null,
-    'numbercal.number-path.records.v1': null
+    'numbercal.number-path.records.v1': null,
+    'numbercal.shape-block.records.v1': null
   }
 });
 

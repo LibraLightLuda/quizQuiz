@@ -85,6 +85,7 @@ describe('공통 언어 활동 생성기', () => {
     expect(question.activity?.kind).toBe('sound-match');
     expect(question.kind).toBe('listening');
     expect(question.speech?.text).toBe(question.explanation);
+    expect(question.speech?.slowReplay).toBeUndefined();
     expect(question.prompt).not.toContain(question.explanation);
   });
 
@@ -98,5 +99,7 @@ describe('공통 언어 활동 생성기', () => {
     });
     expect(question.activity?.kind).toBe('sentence-complete');
     expect(question.options).toHaveLength(4);
+    expect(question.speech).toMatchObject({ lang: 'ko-KR', slowReplay: true });
+    expect(question.speech?.text).toContain('문장을 완성해요');
   });
 });

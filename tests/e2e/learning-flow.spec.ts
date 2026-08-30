@@ -141,6 +141,12 @@ test('말놀이 탐험에서 그림·소리·조립·문장 활동을 한 화면
     await expect(page.locator('.timer-card')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     if (index === 0) await expect(page.locator('.activity-option-picture').first()).toBeVisible();
+    if (index === 4) {
+      await page.getByRole('button', { name: '문장 다시 듣기' }).click();
+      await expect.poll(() => page.evaluate(() => (window as Window & { __speechRatesForTest: number[] }).__speechRatesForTest.at(-1))).toBe(0.85);
+      await page.getByRole('button', { name: '느리게 문장 듣기' }).click();
+      await expect.poll(() => page.evaluate(() => (window as Window & { __speechRatesForTest: number[] }).__speechRatesForTest.at(-1))).toBe(0.75);
+    }
     if (await page.locator('.tile-build-board').count()) {
       const tileCount = await page.locator('.tile-slot').count();
       if (index === 2) {
@@ -309,19 +315,20 @@ test('듣기와 다시 듣기가 중첩 없이 동작한다', async ({ page }) =
   expect(spokenCount).toBe(2);
 });
 
-test('설정한 읽기 속도와 느리게 다시 듣기가 한국어·영어 듣기에 적용된다', async ({ page }) => {
+test('단어 듣기는 기본 속도로만 다시 들을 수 있다', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 568 });
   await installSpeechMock(page);
   await page.goto('/');
   await page.getByRole('button', { name: '설정 열기' }).click();
-  await page.getByRole('radio', { name: /또박또박/ }).click();
-  await expect(page.getByRole('radio', { name: /또박또박/ })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('radio', { name: /천천히/ }).click();
+  await expect(page.getByRole('radio', { name: /천천히/ })).toHaveAttribute('aria-checked', 'true');
   await page.getByRole('button', { name: '뒤로 가기' }).click();
   await start(page, /영어 영어 단어/, /듣고 고르기/);
-  await expect(page.getByRole('button', { name: '느리게 다시 듣기' })).toBeEnabled({ timeout: 3000 });
+  await expect(page.getByRole('button', { name: '다시 듣기', exact: true })).toBeEnabled({ timeout: 3000 });
+  await expect(page.getByRole('button', { name: /느리게/ })).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => (window as Window & { __speechRatesForTest: number[] }).__speechRatesForTest.at(-1))).toBe(0.95);
-  await page.getByRole('button', { name: '느리게 다시 듣기' }).click();
-  await expect.poll(() => page.evaluate(() => (window as Window & { __speechRatesForTest: number[] }).__speechRatesForTest.at(-1))).toBe(0.75);
+  await page.getByRole('button', { name: '다시 듣기', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as Window & { __speechRatesForTest: number[] }).__speechRatesForTest.at(-1))).toBe(0.95);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
@@ -393,7 +400,7 @@ test('모바일 홈은 오늘의 추천과 어린이용 학습 타일을 먼저 
   await expect(page.getByRole('heading', { name: /어린이 학습 놀이터/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /오늘의 추천 (이야기 탐험대|균형 저울|숫자 길 찾기) 시작하기/ })).toBeVisible();
   await expect(page.locator('.home-guide')).toBeVisible();
-  await expect(page.locator('.subject-grid .subject-card')).toHaveCount(8);
+  await expect(page.locator('.subject-grid .subject-card')).toHaveCount(9);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });
 
@@ -496,7 +503,7 @@ test('PC 홈 화면의 학습 카드가 같은 크기로 3열 정렬된다', asy
   expect(rows).toHaveLength(3);
   expect(cards.filter((card) => Math.round(card.top) === rows[0])).toHaveLength(3);
   expect(cards.filter((card) => Math.round(card.top) === rows[1])).toHaveLength(3);
-  expect(cards.filter((card) => Math.round(card.top) === rows[2])).toHaveLength(2);
+  expect(cards.filter((card) => Math.round(card.top) === rows[2])).toHaveLength(3);
   expect(cards.every((card) => card.left >= 0 && card.left + card.width <= 1280)).toBe(true);
 });
 

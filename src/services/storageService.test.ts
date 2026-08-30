@@ -6,17 +6,19 @@ describe('로컬 저장', () => {
   beforeEach(() => localStorage.clear());
 
   it('설정을 저장하고 다시 불러온다', () => {
-    const settings = { ...DEFAULT_SETTINGS, sound: false, speechRate: 0.95 as const };
+    const settings = { ...DEFAULT_SETTINGS, sound: false, haptics: false, speechRate: 0.95 as const };
     expect(saveSettings(settings)).toBe(true);
     expect(loadSettings().sound).toBe(false);
+    expect(loadSettings().haptics).toBe(false);
     expect(loadSettings().speechRate).toBe(0.95);
   });
 
-  it('이전 설정에는 기본 듣기 속도를 보완하고 잘못된 값은 사용하지 않는다', () => {
+  it('이전 설정에는 기본 듣기 속도와 촉각 반응을 보완하고 잘못된 값은 사용하지 않는다', () => {
     localStorage.setItem('numbercal.settings.v1', JSON.stringify({
       schemaVersion: 1, sound: true, tts: true, animations: true, lastConfig: DEFAULT_SETTINGS.lastConfig
     }));
     expect(loadSettings().speechRate).toBe(0.85);
+    expect(loadSettings().haptics).toBe(true);
     localStorage.setItem('numbercal.settings.v1', JSON.stringify({ ...DEFAULT_SETTINGS, speechRate: 2 }));
     expect(loadSettings().speechRate).toBe(0.85);
   });

@@ -24,6 +24,14 @@ describe('학습 기록 내보내기와 가져오기', () => {
     expect(parseLearningRecordTransfer(JSON.stringify({ schemaVersion: 1 })).ok).toBe(false);
   });
 
+  it('모양블록 키가 없던 이전 v1 기록 파일도 빈 기록으로 불러온다', () => {
+    const transfer = createLearningRecordTransfer();
+    delete (transfer.records as Partial<typeof transfer.records>)['numbercal.shape-block.records.v1'];
+    const parsed = parseLearningRecordTransfer(JSON.stringify(transfer));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(parsed.transfer.records['numbercal.shape-block.records.v1']).toBeNull();
+  });
+
   it('미리보기 뒤 전체 기록 묶음을 교체하고 없는 기록은 남기지 않는다', () => {
     localStorage.setItem('numbercal.history.v1', JSON.stringify({ schemaVersion: 1, sessions: [{ id: 'old' }] }));
     localStorage.setItem('numbercal.memory.records.v1', JSON.stringify({ schemaVersion: 1, lastMode: 'mixed' }));

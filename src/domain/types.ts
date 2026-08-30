@@ -55,7 +55,12 @@ export interface Question {
   kind: QuestionKind;
   prompt: string;
   hint?: string;
-  speech?: { text: string; lang: 'ko-KR' | 'en-US' };
+  speech?: {
+    text: string;
+    lang: 'ko-KR' | 'en-US';
+    /** 긴 문장을 다시 들을 때만 느린 속도를 선택할 수 있다. */
+    slowReplay?: boolean;
+  };
   options: Option[];
   correctOptionId: string;
   explanation: string;
@@ -160,6 +165,7 @@ export interface AnswerRecord {
 export interface Settings {
   schemaVersion: 1;
   sound: boolean;
+  haptics: boolean;
   tts: boolean;
   speechRate: SpeechRate;
   animations: boolean;
