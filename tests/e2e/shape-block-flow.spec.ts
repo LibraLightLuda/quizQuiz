@@ -126,17 +126,20 @@ test('줄 채우기에서 회전·배치하고 새로고침 뒤 이어 한다', 
 });
 
 test('320px에서도 홈과 두 게임판이 가로로 넘치지 않는다', async ({ page }) => {
+  const expectNoHorizontalOverflow = async () => {
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth), { timeout: 3_000 }).toBe(320);
+  };
   await skipTutorial(page);
   await page.setViewportSize({ width: 320, height: 568 });
   await openShapeBlock(page);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+  await expectNoHorizontalOverflow();
   await page.getByRole('button', { name: /칠교 그림 완성/ }).click();
   await page.getByRole('button', { name: /1번 고양이/ }).click();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+  await expectNoHorizontalOverflow();
   await page.getByRole('button', { name: '뒤로 가기' }).click();
   await page.getByRole('button', { name: '뒤로 가기' }).click();
   await page.getByRole('button', { name: /8×8 줄 채우기/ }).click();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+  await expectNoHorizontalOverflow();
   await expect(page.getByRole('grid', { name: '8 곱하기 8 줄 채우기 판' })).toBeVisible();
 });
 
