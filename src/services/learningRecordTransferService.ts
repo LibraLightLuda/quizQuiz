@@ -33,7 +33,7 @@ const expectedRecordSchema: Record<LearningRecordKey, number | readonly number[]
   'numbercal.story.records.v1': 1,
   'numbercal.balance.records.v1': 1,
   'numbercal.number-path.records.v1': [1, 2],
-  'numbercal.shape-block.records.v1': 1
+  'numbercal.block-garden.records.v1': 1
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -52,7 +52,7 @@ const isTransfer = (value: unknown): value is LearningRecordTransfer => {
     || typeof value.exportedAt !== 'string' || Number.isNaN(Date.parse(value.exportedAt)) || !isRecord(value.records)) return false;
   const records = value.records as Record<string, unknown>;
   if (Object.keys(records).some((key) => !LEARNING_RECORD_KEYS.includes(key as LearningRecordKey))) return false;
-  const legacyOptional: LearningRecordKey = 'numbercal.shape-block.records.v1';
+  const legacyOptional: LearningRecordKey = 'numbercal.block-garden.records.v1';
   if (LEARNING_RECORD_KEYS.some((key) => key !== legacyOptional && !(key in records))) return false;
   if (!(legacyOptional in records)) records[legacyOptional] = null;
   return LEARNING_RECORD_KEYS.every((key) => {

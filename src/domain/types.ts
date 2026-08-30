@@ -165,7 +165,6 @@ export interface AnswerRecord {
 export interface Settings {
   schemaVersion: 1;
   sound: boolean;
-  haptics: boolean;
   tts: boolean;
   speechRate: SpeechRate;
   animations: boolean;

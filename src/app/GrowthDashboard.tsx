@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import type { LanguageMasteryEntry, SessionSummary, SkillMastery } from '../domain/types';
 import { buildChildGrowthSummary, buildParentGrowthSummary } from '../domain/growthSummary';
 import { GuideCharacter } from '../visuals/GuideCharacter';
-import { loadShapeBlockGrowthSummary } from '../shape-block/shapeBlockGrowth';
 
 interface GrowthDashboardProps {
   wordMastery: readonly LanguageMasteryEntry[];
@@ -20,7 +19,6 @@ export function GrowthDashboard({ wordMastery, skillMastery, history, onBack }: 
   const holdTimer = useRef<number | null>(null);
   const child = buildChildGrowthSummary(wordMastery, skillMastery);
   const parent = buildParentGrowthSummary(wordMastery, skillMastery, history);
-  const shape = loadShapeBlockGrowthSummary();
 
   const cancelHold = () => {
     if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
@@ -67,12 +65,6 @@ export function GrowthDashboard({ wordMastery, skillMastery, history, onBack }: 
           <p className="eyebrow">실제 학습 예시</p>
           <h2 id="growth-example-title">{parent.example}</h2>
           <p>{parent.explanation}</p>
-        </section>
-        <section className="parent-shape-summary" aria-labelledby="parent-shape-title">
-          <div><p className="eyebrow">공간 감각 놀이</p><h2 id="parent-shape-title">모양블록 성장 기록</h2></div>
-          <div><strong>{shape.completedPictures}개</strong><span>완성한 그림</span></div>
-          <div><strong>{shape.totalStars}개</strong><span>모은 별</span></div>
-          <div><strong>{shape.totalLines}줄</strong><span>줄 채우기</span></div>
         </section>
         <p className="parent-growth-note">이 요약은 기기 안의 학습 흐름을 돕기 위한 정보이며, 학년 진단이나 의학적·발달적 판단이 아닙니다.</p>
       </main>
@@ -134,11 +126,6 @@ export function GrowthDashboard({ wordMastery, skillMastery, history, onBack }: 
         <article><span aria-hidden="true">🌱</span><div><h2>오늘 만난 친구</h2><p>{child.metWords.length ? child.metWords.join(' · ') : EMPTY_LABEL}</p></div></article>
         <article><span aria-hidden="true">✨</span><div><h2>다시 찾은 친구</h2><p>{child.rememberedWords.length ? child.rememberedWords.join(' · ') : '다시 만나면 이곳에 반짝여요.'}</p></div></article>
         <article><span aria-hidden="true">📖</span><div><h2>다음 이야기</h2><p><strong>{child.nextAdventure}</strong> · {child.nextAdventureDetail}</p></div></article>
-      </section>
-      <section className="shape-growth-card" aria-labelledby="shape-growth-title">
-        <span aria-hidden="true">🧩</span>
-        <div><p className="eyebrow">공간 감각 나무</p><h2 id="shape-growth-title">모양을 돌리고 맞춘 만큼 자라요</h2><p>그림 {shape.completedPictures}개 · 별 {shape.totalStars}개 · 오늘의 도전 {shape.dailyChallenges}일</p></div>
-        <div className="shape-growth-progress" role="progressbar" aria-label="공간 감각 나무 성장" aria-valuenow={shape.progress} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${shape.progress}%` }} /></div>
       </section>
       <section className="growth-trail" aria-labelledby="growth-trail-title">
         <div className="growth-section-title"><p className="eyebrow">나의 탐험길</p><h2 id="growth-trail-title">세 곳을 함께 키워요</h2></div>

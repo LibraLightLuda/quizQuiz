@@ -11,7 +11,7 @@ export const LEARNING_RECORD_KEYS = [
   'numbercal.story.records.v1',
   'numbercal.balance.records.v1',
   'numbercal.number-path.records.v1',
-  'numbercal.shape-block.records.v1'
+  'numbercal.block-garden.records.v1'
 ] as const;
 export type LearningRecordKey = typeof LEARNING_RECORD_KEYS[number];
 const HISTORY_KEY: LearningRecordKey = LEARNING_RECORD_KEYS[0];
@@ -20,7 +20,6 @@ const GAME_RECORD_KEYS = LEARNING_RECORD_KEYS.slice(1);
 export const DEFAULT_SETTINGS: Settings = {
   schemaVersion: 1,
   sound: true,
-  haptics: true,
   tts: true,
   speechRate: 0.85,
   animations: true,
@@ -83,7 +82,6 @@ export const loadSettings = (): Settings => {
     return {
       schemaVersion: 1,
       sound: typeof parsed.sound === 'boolean' ? parsed.sound : true,
-      haptics: typeof parsed.haptics === 'boolean' ? parsed.haptics : true,
       tts: typeof parsed.tts === 'boolean' ? parsed.tts : true,
       speechRate: speechRates.includes(parsed.speechRate as SpeechRate) ? parsed.speechRate as SpeechRate : 0.85,
       animations: typeof parsed.animations === 'boolean' ? parsed.animations : true,

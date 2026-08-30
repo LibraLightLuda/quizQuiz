@@ -28,7 +28,7 @@ import { ConceptPicture } from '../visuals/ConceptPicture';
 import { questionConceptIds } from '../visuals/visualAssets';
 import { BalanceIcon } from '../visuals/BalanceIcon';
 import { NumberPathIcon } from '../visuals/NumberPathIcon';
-import { ShapeBlockIcon } from '../visuals/ShapeBlockIcon';
+import { BlockGardenIcon } from '../visuals/BlockGardenIcon';
 import { GrowthDashboard } from './GrowthDashboard';
 import '../styles/global.css';
 
@@ -38,7 +38,7 @@ const MemoryMode = lazy(() => import('../memory/MemoryMode'));
 const StoryMode = lazy(() => import('../story/StoryMode'));
 const BalanceMode = lazy(() => import('../balance/BalanceMode'));
 const NumberPathMode = lazy(() => import('../number-path/NumberPathMode'));
-const ShapeBlockMode = lazy(() => import('../shape-block/ShapeBlockMode'));
+const BlockGardenMode = lazy(() => import('../block-garden/BlockGardenMode'));
 const praiseMessages = ['잘했어요!', '정답이에요!', '대단해요!', '멋져요!', '최고예요!', '한 문제 더!'];
 const gentleMessages = ['같이 찾아볼까요?', '다른 친구도 만나봐요!', '천천히 다시 볼까요?', '모리가 함께할게요!'];
 const makeMessagePicker = (values: readonly string[]) => {
@@ -78,13 +78,12 @@ const dailyCompleted = (storageKey: string, dateKey: string): boolean => {
   }
 };
 
-const recommendedDailyMode = (): 'story' | 'balance' | 'number-path' | 'shape-block' => {
+const recommendedDailyMode = (): 'story' | 'balance' | 'number-path' => {
   const dateKey = localDateKey();
   const modes = [
     { mode: 'story' as const, done: dailyCompleted('numbercal.story.records.v1', dateKey) },
     { mode: 'balance' as const, done: dailyCompleted('numbercal.balance.records.v1', dateKey) },
-    { mode: 'number-path' as const, done: dailyCompleted('numbercal.number-path.records.v1', dateKey) },
-    { mode: 'shape-block' as const, done: dailyCompleted('numbercal.shape-block.records.v1', dateKey) }
+    { mode: 'number-path' as const, done: dailyCompleted('numbercal.number-path.records.v1', dateKey) }
   ];
   const incomplete = modes.filter((item) => !item.done);
   const choices = incomplete.length ? incomplete : modes;
@@ -122,8 +121,7 @@ function App() {
   const [storyOpen, setStoryOpen] = useState(false);
   const [balanceOpen, setBalanceOpen] = useState(false);
   const [numberPathOpen, setNumberPathOpen] = useState(false);
-  const [shapeBlockOpen, setShapeBlockOpen] = useState(false);
-  const [shapeBlockDaily, setShapeBlockDaily] = useState(false);
+  const [blockGardenOpen, setBlockGardenOpen] = useState(false);
   const [growthOpen, setGrowthOpen] = useState(false);
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [timerAnnouncement, setTimerAnnouncement] = useState('');
@@ -720,16 +718,14 @@ function App() {
     );
   }
 
-  if (shapeBlockOpen) {
+  if (blockGardenOpen) {
     return (
       <div className={`app-shell ${activeAnimations ? '' : 'reduce-motion'}`}>
         <Suspense fallback={<GameLoading />}>
-          <ShapeBlockMode
-            onExit={() => { setShapeBlockOpen(false); setShapeBlockDaily(false); }}
+          <BlockGardenMode
+            onExit={() => setBlockGardenOpen(false)}
             soundEnabled={state.settings.sound}
             animationsEnabled={activeAnimations}
-            hapticsEnabled={state.settings.haptics && activeAnimations}
-            startDaily={shapeBlockDaily}
           />
         </Suspense>
       </div>
@@ -750,7 +746,7 @@ function App() {
             <GuideCharacter className="home-guide" decorative />
           </header>
           <section className="home-recommendation" aria-labelledby="today-recommendation-title">
-            <div><p className="eyebrow">오늘의 추천</p><h2 id="today-recommendation-title">{dailyRecommendation === 'story' ? '짧은 이야기 한 편 어때요?' : dailyRecommendation === 'balance' ? '오늘의 저울을 맞춰 볼까요?' : dailyRecommendation === 'number-path' ? '오늘의 숫자 길을 찾아볼까요?' : '오늘의 모양을 만들어 볼까요?'}</h2></div>
+            <div><p className="eyebrow">오늘의 추천</p><h2 id="today-recommendation-title">{dailyRecommendation === 'story' ? '짧은 이야기 한 편 어때요?' : dailyRecommendation === 'balance' ? '오늘의 저울을 맞춰 볼까요?' : '오늘의 숫자 길을 찾아볼까요?'}</h2></div>
             {dailyRecommendation === 'story' ? (
               <button onClick={() => setStoryOpen(true)} aria-label="오늘의 추천 이야기 탐험대 시작하기">
                 <span className="recommendation-icon"><LearningIcon name="story" /></span>
@@ -763,16 +759,10 @@ function App() {
                 <span><strong>균형 저울</strong><small>숫자 추를 놓아 양쪽 합을 맞춰요</small></span>
                 <b aria-hidden="true">시작 ›</b>
               </button>
-            ) : dailyRecommendation === 'number-path' ? (
+            ) : (
               <button onClick={() => setNumberPathOpen(true)} aria-label="오늘의 추천 숫자 길 찾기 시작하기">
                 <span className="recommendation-icon number-path-recommendation-icon"><NumberPathIcon decorative /></span>
                 <span><strong>숫자 길 찾기</strong><small>상하좌우로 이어 목표 합을 만들어요</small></span>
-                <b aria-hidden="true">시작 ›</b>
-              </button>
-            ) : (
-              <button onClick={() => { setShapeBlockDaily(true); setShapeBlockOpen(true); }} aria-label="오늘의 추천 모양블록 시작하기">
-                <span className="recommendation-icon shape-block-recommendation-icon"><ShapeBlockIcon decorative /></span>
-                <span><strong>오늘의 모양블록</strong><small>7개 조각으로 오늘의 그림을 만들어요</small></span>
                 <b aria-hidden="true">시작 ›</b>
               </button>
             )}
@@ -815,9 +805,9 @@ function App() {
               <span className="subject-copy"><strong>숫자 길 찾기</strong><small>숫자를 이어 목표 합을 만들어요</small></span>
               <span className="arrow" aria-hidden="true">›</span>
             </button>
-            <button className="subject-card shape-block" onClick={() => { setShapeBlockDaily(false); setShapeBlockOpen(true); }}>
-              <span className="subject-icon" aria-hidden="true"><ShapeBlockIcon /></span>
-              <span className="subject-copy"><strong>모양블록</strong><small>조각을 돌리고 줄을 채워요</small></span>
+            <button className="subject-card block-garden" onClick={() => setBlockGardenOpen(true)}>
+              <span className="subject-icon" aria-hidden="true"><BlockGardenIcon /></span>
+              <span className="subject-copy"><strong>빈칸 정원</strong><small>세 조각을 놓아 빈칸을 지켜요</small></span>
               <span className="arrow" aria-hidden="true">›</span>
             </button>
             </div>
@@ -1053,7 +1043,6 @@ function App() {
           <TopBar title="설정" onBack={() => dispatch({ type: 'CLOSE_SETTINGS' })} />
           <section className="settings-panel">
             <ToggleRow icon="♪" label="효과음" detail="정답을 맞히면 짧은 소리가 나요" checked={state.settings.sound} onChange={(sound) => updateSettings({ sound })} />
-            <ToggleRow icon="〰" label="손끝 반응" detail="지원하는 기기에서 짧게 톡 느껴져요" checked={state.settings.haptics} onChange={(haptics) => updateSettings({ haptics })} />
             <ToggleRow icon="🔊" label="듣기 음성" detail="한국어·영어 단어와 문장을 읽어줘요" checked={state.settings.tts} onChange={(tts) => { if (!tts) cancelActiveSpeech(); updateSettings({ tts }); }} />
             {state.settings.tts && <SpeechRatePicker value={state.settings.speechRate} onChange={(speechRate) => { cancelActiveSpeech(); updateSettings({ speechRate }); }} />}
             <ToggleRow icon="✨" label="반짝이는 효과" detail="별과 축하 효과를 보여줘요" checked={state.settings.animations} onChange={(animations) => updateSettings({ animations })} />
