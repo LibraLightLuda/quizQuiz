@@ -120,7 +120,9 @@ const chunksFromEnglish = (target: EnglishWord, start: number, length: number, r
 
 const generateKoreanFill = (context: LanguageContext): Question => {
   const target = pickAdaptive(koreanWords, context);
-  const range = pick(context.random, target.maskRanges);
+  const freshRanges = target.maskRanges.filter((range) =>
+    !context.recentSignatures.includes(`ko-fill:${target.id}:${range.start}:${range.length}`));
+  const range = pick(context.random, freshRanges.length ? freshRanges : target.maskRanges);
   const result = mask(target.word, range.start, range.length);
   const candidates = [...(target.distractorChunks ?? []), ...chunksFromKorean(target, range.start, range.length, context.random)];
   const { options, correctOptionId } = makeOptions(
@@ -141,7 +143,9 @@ const generateKoreanFill = (context: LanguageContext): Question => {
 
 const generateEnglishFill = (context: LanguageContext): Question => {
   const target = pickAdaptive(englishWords, context);
-  const range = pick(context.random, target.maskRanges);
+  const freshRanges = target.maskRanges.filter((range) =>
+    !context.recentSignatures.includes(`en-fill:${target.id}:${range.start}:${range.length}`));
+  const range = pick(context.random, freshRanges.length ? freshRanges : target.maskRanges);
   const result = mask(target.word, range.start, range.length);
   const knownWords = new Set(englishWords.map((word) => word.word));
   const candidates = [...(target.distractorChunks ?? []), ...chunksFromEnglish(target, range.start, range.length, context.random)]

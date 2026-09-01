@@ -9,6 +9,7 @@ describe('이야기 탐험대 콘텐츠', () => {
 
   it('모든 장면과 활동의 연결 관계가 유효하다', () => {
     expect(validateStories()).toEqual([]);
+    expect(stories.every((story) => story.activities.length >= 6)).toBe(true);
   });
 
   it('장면에 낱말·기술·문장 수준 태그를 연결한다', () => {

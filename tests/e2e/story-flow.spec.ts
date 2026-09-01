@@ -1,4 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
+import { stories } from '../../src/story/storyData';
+import type { StoryActivity } from '../../src/story/types';
 
 const openStoryMode = async (page: Page) => {
   await page.goto('/');
@@ -22,6 +24,37 @@ const arrangeSequence = async (page: Page, expected: readonly string[]) => {
     await cards.filter({ hasText: expected[index] }).click();
   }
   await page.getByRole('button', { name: '이 순서 확인하기' }).click();
+};
+
+const currentActivity = async (page: Page, title: string): Promise<StoryActivity> => {
+  const story = stories.find((candidate) => candidate.title === title)!;
+  const prompt = (await page.locator('#story-question-title').innerText()).trim();
+  const activity = story.activities.find((candidate) => candidate.prompt === prompt);
+  if (!activity) throw new Error(`현재 이야기 활동을 찾지 못했어요: ${title} / ${prompt}`);
+  return activity;
+};
+
+const solveCurrentActivity = async (page: Page, title: string): Promise<StoryActivity> => {
+  const story = stories.find((candidate) => candidate.title === title)!;
+  const activity = await currentActivity(page, title);
+  if (activity.type === 'sequence') {
+    await arrangeSequence(page, activity.sceneIds.map((sceneId) => story.scenes.find((scene) => scene.id === sceneId)!.text));
+  } else {
+    const correct = activity.options.find((option) => option.id === activity.correctOptionId)!;
+    await page.getByRole('button', { name: correct.label, exact: true }).click();
+    if (activity.evidenceRequired) {
+      const evidence = story.scenes.find((scene) => scene.id === activity.evidenceSceneId)!;
+      await page.getByRole('button', { name: new RegExp(evidence.text.slice(0, 24)) }).click();
+    }
+  }
+  return activity;
+};
+
+const finishStoryActivities = async (page: Page, title: string, finalButton = '결과 보기') => {
+  for (let index = 0; index < 3; index += 1) {
+    await solveCurrentActivity(page, title);
+    await page.getByRole('button', { name: index === 2 ? finalButton : '다음 활동' }).click();
+  }
 };
 
 const installSpeechMock = async (page: Page) => {
@@ -84,16 +117,7 @@ test('최근 배운 낱말이 오늘의 이야기 미션과 장면에서 다시 
   await page.getByRole('button', { name: '다음 장면' }).click();
   await page.getByRole('button', { name: '다음 장면' }).click();
   await page.getByRole('button', { name: '활동 시작' }).click();
-  await page.getByRole('button', { name: '미끄럼틀 아래' }).click();
-  await page.getByRole('button', { name: '다음 활동' }).click();
-  await arrangeSequence(page, [
-    '유나는 놀이터에서 빨간 장갑 한 짝을 잃어버렸어요.',
-    '유나는 미끄럼틀 아래를 자세히 살펴보았어요.',
-    '장갑을 찾은 유나는 활짝 웃었어요.'
-  ]);
-  await page.getByRole('button', { name: '다음 활동' }).click();
-  await page.getByRole('button', { name: '장갑을 찾아서' }).click();
-  await page.getByRole('button', { name: '낱말 떠올리기' }).click();
+  await finishStoryActivities(page, '빨간 장갑 한 짝', '낱말 떠올리기');
   await expect(page.getByRole('heading', { name: '1 / 2' })).toBeVisible();
   await page.getByRole('button', { name: '놀이터', exact: true }).click();
   await page.getByRole('button', { name: '다음 낱말' }).click();
@@ -108,19 +132,7 @@ test('최근 배운 낱말이 오늘의 이야기 미션과 장면에서 다시 
 test('새싹 이야기를 읽고 세 활동과 결과까지 완료한다', async ({ page }) => {
   await openStoryMode(page);
   await readToActivities(page, '비 오는 날의 우산', 3);
-
-  await page.getByRole('button', { name: '우산' }).click();
-  await expect(page.getByText('비가 내리자 지우는 우산을 폈어요.')).toBeVisible();
-  await page.getByRole('button', { name: '다음 활동' }).click();
-
-  await arrangeSequence(page, [
-    '하늘에 먹구름이 모였어요.',
-    '곧 비가 내려서 지우가 우산을 폈어요.',
-    '지우는 우산이 없는 민수와 함께 걸었어요.'
-  ]);
-  await page.getByRole('button', { name: '다음 활동' }).click();
-  await page.getByRole('button', { name: '고마웠어요' }).click();
-  await page.getByRole('button', { name: '결과 보기' }).click();
+  await finishStoryActivities(page, '비 오는 날의 우산');
 
   await expect(page.getByRole('heading', { name: '비 오는 날의 우산' })).toBeVisible();
   await expect(page.locator('.story-stars')).toHaveAttribute('aria-label', '별 3개');
@@ -132,16 +144,24 @@ test('연속 추측을 막고 두 번 틀리면 이야기 재확인을 요구한
   await page.getByRole('radio', { name: /탐험가/ }).click();
   await readToActivities(page, '벌이 찾은 꽃밭', 5);
 
-  const firstWrong = page.getByRole('button', { name: '하얀 눈' });
-  const secondWrong = page.getByRole('button', { name: '푸른 잉크' });
-  const correct = page.getByRole('button', { name: '노란 꽃가루' });
-  await page.evaluate(() => {
+  let activity = await currentActivity(page, '벌이 찾은 꽃밭');
+  while (activity.type !== 'choice' || activity.options.length < 3) {
+    await solveCurrentActivity(page, '벌이 찾은 꽃밭');
+    await page.getByRole('button', { name: '다음 활동' }).click();
+    activity = await currentActivity(page, '벌이 찾은 꽃밭');
+  }
+  const wrongOptions = activity.options.filter((option) => option.id !== activity.correctOptionId);
+  const correctOption = activity.options.find((option) => option.id === activity.correctOptionId)!;
+  const firstWrong = page.locator('.story-choice-grid button').filter({ hasText: wrongOptions[0].label });
+  const secondWrong = page.locator('.story-choice-grid button').filter({ hasText: wrongOptions[1].label });
+  const correct = page.locator('.story-choice-grid button').filter({ hasText: correctOption.label });
+  await page.evaluate(({ wrong, answer }) => {
     const buttons = [...document.querySelectorAll<HTMLButtonElement>('.story-choice-grid button')];
-    buttons.find((button) => button.textContent?.includes('하얀 눈'))?.click();
-    buttons.find((button) => button.textContent?.includes('노란 꽃가루'))?.click();
-  });
+    buttons.find((button) => button.textContent?.includes(wrong))?.click();
+    buttons.find((button) => button.textContent?.includes(answer))?.click();
+  }, { wrong: wrongOptions[0].label, answer: correctOption.label });
   await expect(firstWrong).toBeDisabled();
-  await expect(page.getByText('벌이 꽃 위에 앉은 뒤 묻었어요.')).toBeVisible();
+  await expect(page.getByText(activity.hint)).toBeVisible();
   await expect(correct).toBeEnabled();
 
   await page.waitForTimeout(650);
@@ -150,7 +170,9 @@ test('연속 추측을 막고 두 번 틀리면 이야기 재확인을 요구한
   await expect(correct).toBeDisabled();
   await page.getByRole('button', { name: /이야기 다시 살펴보기/ }).click();
   await expect(page.getByText(/관련 장면을 천천히 다시 읽어/)).toBeVisible();
-  await expect(page.locator('.story-progress')).toHaveAttribute('aria-label', '이야기 3 / 5장면');
+  const story = stories.find((candidate) => candidate.title === '벌이 찾은 꽃밭')!;
+  const evidenceIndex = story.scenes.findIndex((scene) => scene.id === activity.evidenceSceneId);
+  await expect(page.locator('.story-progress')).toHaveAttribute('aria-label', `이야기 ${evidenceIndex + 1} / 5장면`);
   await page.getByRole('button', { name: '활동으로 돌아가기' }).click();
   await expect(correct).toBeEnabled();
 });
@@ -173,22 +195,22 @@ test('생각왕은 정답 뒤 이야기 속 근거까지 찾아야 완료된다'
   await openStoryMode(page);
   await page.getByRole('radio', { name: /생각왕/ }).click();
   await readToActivities(page, '개울을 막은 비닐', 6);
-  await page.getByRole('button', { name: '안전을 지키기 위해서' }).click();
-  await page.getByRole('button', { name: '다음 활동' }).click();
-  await arrangeSequence(page, [
-    '밤새 비가 온 뒤 학교 옆 개울물이 평소보다 느리게 흘렀다.',
-    '환경 동아리 아이들은 물길 가장자리에 나뭇잎과 비닐이 엉킨 것을 발견했다.',
-    '아이들은 위험하게 물에 들어가지 않고 선생님께 사진과 위치를 알렸다.',
-    '안전 장비를 갖춘 관리 직원이 막힌 쓰레기를 걷어 냈다.',
-    '막힘이 사라지자 개울물은 다시 자연스럽게 흘렀다.',
-    '아이들은 비 오는 날 쓰레기가 물길을 막을 수 있다는 안내판을 만들었다.'
-  ]);
-  await page.getByRole('button', { name: '다음 활동' }).click();
-  await page.getByRole('button', { name: '물길을 막은 쓰레기를 걷어 내서' }).click();
-  await expect(page.getByRole('heading', { name: '어느 장면이 가장 좋은 근거일까요?' })).toBeVisible();
-  await expect(page.getByRole('button', { name: '결과 보기' })).toHaveCount(0);
-  await page.getByRole('button', { name: /막힘이 사라지자 개울물은 다시/ }).click();
-  await expect(page.getByRole('button', { name: '결과 보기' })).toBeVisible();
+  for (let index = 0; index < 3; index += 1) {
+    const activity = await currentActivity(page, '개울을 막은 비닐');
+    if (activity.type === 'choice' && activity.evidenceRequired) {
+      const correct = activity.options.find((option) => option.id === activity.correctOptionId)!;
+      await page.getByRole('button', { name: correct.label, exact: true }).click();
+      await expect(page.getByRole('heading', { name: '어느 장면이 가장 좋은 근거일까요?' })).toBeVisible();
+      const story = stories.find((candidate) => candidate.title === '개울을 막은 비닐')!;
+      const evidence = story.scenes.find((scene) => scene.id === activity.evidenceSceneId)!;
+      await page.getByRole('button', { name: new RegExp(evidence.text.slice(0, 24)) }).click();
+      await expect(page.getByRole('button', { name: /다음 활동|결과 보기/ })).toBeVisible();
+      return;
+    }
+    await solveCurrentActivity(page, '개울을 막은 비닐');
+    await page.getByRole('button', { name: '다음 활동' }).click();
+  }
+  throw new Error('근거를 고르는 활동이 포함되지 않았어요.');
 });
 
 test('320px 화면에서 이야기 홈과 읽기 화면이 가로로 넘치지 않는다', async ({ page }) => {
@@ -307,6 +329,7 @@ test('이야기 장면과 활동 문제를 음성으로 들을 수 있다', asyn
   await page.getByRole('button', { name: '다음 장면' }).click();
   await page.getByRole('button', { name: '다음 장면' }).click();
   await page.getByRole('button', { name: '활동 시작' }).click();
+  const activityPrompt = (await page.locator('#story-question-title').innerText()).trim();
   await page.getByRole('button', { name: /문제 읽어 주기/ }).click();
-  await expect.poll(() => page.evaluate(() => (window as Window & { __storySpokenForTest: string[] }).__storySpokenForTest.at(-1))).toContain('지우가 편 것은 무엇인가요?');
+  await expect.poll(() => page.evaluate(() => (window as Window & { __storySpokenForTest: string[] }).__storySpokenForTest.at(-1))).toContain(activityPrompt);
 });

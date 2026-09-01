@@ -7,6 +7,7 @@ export default defineConfig({
   reporter: 'list',
   use: {
     baseURL: 'http://127.0.0.1:4175',
+    locale: 'ko-KR',
     trace: 'retain-on-failure'
   },
   projects: [

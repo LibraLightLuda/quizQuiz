@@ -1,4 +1,4 @@
-import { createId, shuffle, type RandomSource, CryptoRandom, SeededRandom } from '../services/randomService';
+import { createId, shuffle, type RandomSource, CryptoRandom } from '../services/randomService';
 import { storiesByLevel } from './storyData';
 import type { Story, StoryActivityState, StoryLevel, StoryProgress, StoryVocabularyMission } from './types';
 
@@ -13,7 +13,16 @@ const shuffledDifferent = (values: readonly string[], random: RandomSource): str
 
 export const createStoryActivityStates = (
   story: Story, random: RandomSource = new CryptoRandom()
-): StoryActivityState[] => story.activities.map((activity) => ({
+): StoryActivityState[] => {
+  const sequences = story.activities.filter((activity) => activity.type === 'sequence');
+  const authored = story.activities.slice(0, 3).filter((activity) => activity.type === 'choice');
+  const generated = story.activities.slice(3).filter((activity) => activity.type === 'choice');
+  const chosen = shuffle(random, [
+    ...shuffle(random, authored).slice(0, 1),
+    ...shuffle(random, generated).slice(0, 1),
+    ...shuffle(random, sequences).slice(0, 1)
+  ]);
+  return chosen.map((activity) => ({
   activityId: activity.id,
   status: 'active',
   optionOrder: activity.type === 'choice' ? shuffle(random, activity.options.map((option) => option.id)) : [],
@@ -26,7 +35,8 @@ export const createStoryActivityStates = (
   reviewCount: 0,
   mustReview: false,
   firstTry: true
-}));
+  }));
+};
 
 export const createStoryProgress = (
   story: Story, daily = false, dateKey?: string, random: RandomSource = new CryptoRandom(),
@@ -74,18 +84,6 @@ export const pickStory = (
   const candidates = fresh.length ? fresh : pool;
   return candidates[Math.min(candidates.length - 1, Math.floor(random.next() * candidates.length))];
 };
-
-const hashText = (value: string): number => {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-};
-
-export const dailyStory = (dateKey: string, level: StoryLevel): Story =>
-  pickStory(level, [], new SeededRandom(hashText(`${dateKey}:${level}:story`)));
 
 export const storyDailyKey = (date = new Date()): string => {
   const year = date.getFullYear();

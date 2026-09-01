@@ -147,17 +147,20 @@ const buildTopology = (config: DifficultyConfig, random: RandomSource): {
   edgePairs: Array<[string, string, number]>;
   solutionBridgeIds: string[];
 } => {
-  const nodes: NumberPathNode[] = Array.from({ length: config.crossings + 1 }, (_, layer) => ({
-    id: nodeId(layer),
-    layer,
-    lane: 1,
-    kind: layer === 0 ? 'start' : layer === config.crossings ? 'end' : 'junction'
-  }));
+  const nodes: NumberPathNode[] = Array.from({ length: config.crossings + 1 }, (_, layer) => {
+    const lane = layer === 0 || layer === config.crossings ? 1 : randomInt(random, 0, 2);
+    return {
+      id: nodeId(layer, lane),
+      layer,
+      lane,
+      kind: layer === 0 ? 'start' : layer === config.crossings ? 'end' : 'junction'
+    };
+  });
   const edgePairs: Array<[string, string, number]> = [];
   const solutionBridgeIds: string[] = [];
   for (let layer = 0; layer < config.crossings; layer += 1) {
-    const from = nodeId(layer);
-    const to = nodeId(layer + 1);
+    const from = nodes[layer].id;
+    const to = nodes[layer + 1].id;
     const choiceCount = config.threeWayLayer === layer ? 3 : 2;
     for (let option = 0; option < choiceCount; option += 1) edgePairs.push([from, to, option]);
     const solutionOption = randomInt(random, 0, choiceCount - 1);

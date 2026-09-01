@@ -13,7 +13,8 @@ describe('이야기 탐험대 저장소', () => {
     progress.screen = 'activity';
     progress.pageIndex = 2;
     progress.activities[0].wrongAttempts = 1;
-    progress.activities[0].triedOptionIds = [story.activities[0].type === 'choice' ? story.activities[0].options[1].id : ''];
+    const active = story.activities.find((activity) => activity.id === progress.activities[0].activityId)!;
+    progress.activities[0].triedOptionIds = active.type === 'choice' ? [active.options[1].id] : [];
     expect(saveStoryProgress(progress)).toBe(true);
     expect(loadStoryProgress()).toEqual(progress);
     expect(clearStoryProgress()).toBe(true);

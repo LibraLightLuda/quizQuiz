@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { playSuccessSound, unlockAudio } from '../services/soundService';
 import { MEMORY_DIFFICULTIES, MEMORY_MODES, memoryDifficultyInfo, memoryModeInfo } from './memoryData';
-import { calculateStars, createMemoryProgress, formatMemoryTime, todayKey } from './memoryGenerator';
+import { calculateStars, createMemoryProgress, formatMemoryTime, memoryContentSignature, todayKey } from './memoryGenerator';
 import {
   clearMemoryProgress,
   loadMemoryProgress,
@@ -19,6 +19,8 @@ import { getMemoryAchievementStatuses, getNewMemoryAchievementIds, memoryRecordS
 import { useGrowth } from '../growth/GrowthContext';
 import { GrowthCelebration, GrowthRewardCard } from '../growth/GrowthUI';
 import type { GrowthAward } from '../growth/types';
+import { useLocale } from '../i18n/LocaleContext';
+import { createGenerationIssue, recordIssuedFingerprints } from '../services/contentVarietyService';
 import './memory.css';
 
 type MemoryScreen = 'levels' | 'play' | 'result' | 'collection';
@@ -34,6 +36,7 @@ const categoryLabels = { math: '수', korean: '한', english: '영' } as const;
 const praiseMessages = ['멋진 연결이에요!', '기억력이 반짝!', '정확해요!', '아주 잘 찾았어요!'];
 
 function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMatched }: MemoryModeProps) {
+  const { locale, t } = useLocale();
   const growth = useGrowth();
   const initialProgress = useMemo(() => loadMemoryProgress(), []);
   const [records, setRecords] = useState(() => loadMemoryRecords());
@@ -45,7 +48,7 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMat
   const [elapsedMs, setElapsedMs] = useState(0);
   const [result, setResult] = useState<MemoryResult | null>(null);
   const [growthAward, setGrowthAward] = useState<GrowthAward | null>(null);
-  const [message, setMessage] = useState('서로 뜻이 통하는 카드 두 장을 찾아보세요.');
+  const [message, setMessage] = useState(() => t('서로 뜻이 통하는 카드 두 장을 찾아보세요.', 'Find two cards with connected meanings.'));
   const [locked, setLocked] = useState(false);
   const [celebrate, setCelebrate] = useState(false);
   const [storageWarning, setStorageWarning] = useState(false);
@@ -102,18 +105,23 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMat
     setResult(null);
     setLocked(false);
     setCelebrate(false);
-    setMessage(next.daily ? '오늘의 도전이에요! 세 과목의 연결을 찾아봐요.' : '서로 뜻이 통하는 카드 두 장을 찾아보세요.');
+    setMessage(next.daily ? t('오늘의 도전이에요! 세 과목의 연결을 찾아봐요.', "This is today's challenge! Find connections across three subjects.") : t('서로 뜻이 통하는 카드 두 장을 찾아보세요.', 'Find two cards with connected meanings.'));
     setScreen('play');
   };
 
   const startGame = (nextMode = mode, nextDifficulty = difficulty, daily = false) => {
-    if (savedProgress && !window.confirm('새 게임을 시작하면 지금 하던 게임은 바뀌어요. 시작할까요?')) return;
+    if (savedProgress && !window.confirm(t('새 게임을 시작하면 지금 하던 게임은 바뀌어요. 시작할까요?', 'Starting a new game will replace your saved game. Start anyway?'))) return;
     void unlockAudio();
     const dateKey = daily ? todayKey() : undefined;
-    const seed = daily ? `daily-${dateKey}` : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const actualDifficulty: MemoryDifficulty = nextDifficulty;
     const actualMode: MemoryModeType = daily ? 'mixed' : nextMode;
-    const actualDifficulty: MemoryDifficulty = daily ? 'growing' : nextDifficulty;
-    const next = createMemoryProgress(actualMode, actualDifficulty, seed, daily, dateKey, records.recentLayouts);
+    const issue = createGenerationIssue({
+      sectionId: 'memory', variant: `${actualMode}:${actualDifficulty}`, daily, dateKey
+    });
+    const next = createMemoryProgress(
+      actualMode, actualDifficulty, issue.seed, daily, dateKey, records.recentLayouts, issue.excludedFingerprints
+    );
+    recordIssuedFingerprints(issue, [memoryContentSignature(next.cards)]);
     const nextRecords = rememberMemoryChoice(records, actualMode, actualDifficulty);
     setRecords(nextRecords);
     storeProgress(next);
@@ -159,7 +167,7 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMat
     const elapsed = currentElapsed();
     if (selected.length === 1) {
       storeProgress({ ...progress, selectedCardIds: selected, elapsedMs: elapsed, updatedAt: new Date().toISOString() });
-      setMessage('한 장 더 골라 볼까요?');
+      setMessage(t('한 장 더 골라 볼까요?', 'Choose one more card.'));
       return;
     }
 
@@ -202,7 +210,7 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMat
       return;
     }
 
-    setMessage('괜찮아요! 카드를 기억하고 다시 생각해 봐요.');
+    setMessage(t('괜찮아요! 카드를 기억하고 다시 생각해 봐요.', 'That is okay. Remember the cards and try again.'));
     revealTimer.current = window.setTimeout(() => {
       storeProgress({ ...checked, selectedCardIds: [], combo: 0, updatedAt: new Date().toISOString() });
       setLocked(false);
@@ -230,23 +238,23 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMat
     return (
       <main className="screen memory-play-screen">
         <header className="memory-game-header">
-          <button className="icon-button" onClick={returnToLevels} aria-label="단계 선택으로 돌아가기">←</button>
+          <button className="icon-button" onClick={returnToLevels} aria-label={t('단계 선택으로 돌아가기', 'Return to level selection')}>←</button>
           <div>
-            <small>{progress.daily ? '오늘의 도전' : `${memoryModeInfo[progress.mode].label} · ${memoryDifficultyInfo[progress.difficulty].label}`}</small>
-            <strong>{matchedPairs} / {pairCount}쌍</strong>
+            <small>{progress.daily ? t('오늘의 도전', "Today's Challenge") : `${locale === 'ko' ? memoryModeInfo[progress.mode].label : progress.mode === 'math' ? 'Math' : progress.mode === 'korean' ? 'Korean' : progress.mode === 'english' ? 'English' : 'Mixed'} · ${locale === 'ko' ? memoryDifficultyInfo[progress.difficulty].label : progress.difficulty === 'starter' ? 'Starter' : progress.difficulty === 'growing' ? 'Growing' : progress.difficulty === 'focus' ? 'Focus' : 'Master'}`}</small>
+            <strong>{matchedPairs} / {pairCount} {t('쌍', 'pairs')}</strong>
           </div>
           <div className="memory-timer" aria-label={`걸린 시간 ${formatMemoryTime(elapsedMs)}`}>⏱ <b>{formatMemoryTime(elapsedMs)}</b></div>
         </header>
         <div className="memory-status-row">
-          <span>시도 <b>{progress.attempts}</b></span>
-          <span>연속 <b>{progress.combo}</b></span>
-          <span>별 <b>{'★'.repeat(Math.max(1, calculateStars(pairCount, progress.attempts)))}</b></span>
+          <span>{t('시도', 'Tries')} <b>{progress.attempts}</b></span>
+          <span>{t('연속', 'Combo')} <b>{progress.combo}</b></span>
+          <span>{t('별', 'Stars')} <b>{'★'.repeat(Math.max(1, calculateStars(pairCount, progress.attempts)))}</b></span>
         </div>
         <div className="memory-progress" aria-hidden="true"><span style={{ width: `${(matchedPairs / pairCount) * 100}%` }} /></div>
         <p className={`memory-message ${celebrate && animationsEnabled ? 'is-celebrating' : ''}`} aria-live="polite">
           {celebrate ? '✨ ' : ''}{message}
         </p>
-        <section className={`memory-grid ${pairCount === 4 ? 'memory-grid-small' : 'memory-grid-dense'}`} aria-label="기억력 카드 판">
+        <section className={`memory-grid ${pairCount === 4 ? 'memory-grid-small' : 'memory-grid-dense'}`} aria-label={t('기억력 카드 판', 'Memory card board')}>
           {progress.cards.map((card, index) => {
             const flipped = progress.selectedCardIds.includes(card.id) || progress.matchedCardIds.includes(card.id);
             const matched = progress.matchedCardIds.includes(card.id);
@@ -268,7 +276,7 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMat
             );
           })}
         </section>
-        {storageWarning && <p className="memory-warning">기록 저장 공간을 확인해 주세요. 게임은 계속할 수 있어요.</p>}
+        {storageWarning && <p className="memory-warning">{t('기록 저장 공간을 확인해 주세요. 게임은 계속할 수 있어요.', 'Please check record storage. You can keep playing.')}</p>}
       </main>
     );
   }
@@ -280,8 +288,8 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMat
       <main className="screen memory-result-screen">
         {growthAward && <GrowthCelebration award={growthAward} animationsEnabled={animationsEnabled} />}
         <div className="memory-result-burst" aria-hidden="true">🏆</div>
-        <p className="eyebrow">모든 연결을 찾았어요!</p>
-        <h1>{result.isBestTime || result.isBestAttempts ? '새로운 최고 기록!' : '기억력 챌린지 성공!'}</h1>
+        <p className="eyebrow">{t('모든 연결을 찾았어요!', 'You found every connection!')}</p>
+        <h1>{result.isBestTime || result.isBestAttempts ? t('새로운 최고 기록!', 'New best record!') : t('기억력 챌린지 성공!', 'Memory Challenge complete!')}</h1>
         <div className="memory-stars" aria-label={`${result.stars}개의 별 획득`}>{'★'.repeat(result.stars)}<span>{'★'.repeat(3 - result.stars)}</span></div>
         {growthAward && <GrowthRewardCard award={growthAward} />}
         {result.earnedDailyBadge && <div className="daily-badge"><span>🌟</span><strong>오늘의 특별 배지</strong><small>매일 도전한 멋진 기억력 탐험가!</small></div>}
@@ -291,16 +299,16 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMat
             <div>{newAchievements.map((achievement) => <span key={achievement.id}><i aria-hidden="true">{achievement.icon}</i><strong>{achievement.title}</strong></span>)}</div>
           </section>
         )}
-        <section className="memory-result-stats" aria-label="게임 결과">
-          <div><small>완료 시간</small><strong>{formatMemoryTime(result.elapsedMs)}</strong>{result.isBestTime && <em>최고!</em>}</div>
-          <div><small>시도 횟수</small><strong>{result.attempts}번</strong>{result.isBestAttempts && <em>최소!</em>}</div>
-          <div><small>정답률</small><strong>{result.accuracy}%</strong><span>최대 콤보 {result.bestCombo}</span></div>
+        <section className="memory-result-stats" aria-label={t('게임 결과', 'Game results')}>
+          <div><small>{t('완료 시간', 'Time')}</small><strong>{formatMemoryTime(result.elapsedMs)}</strong>{result.isBestTime && <em>{t('최고!', 'Best!')}</em>}</div>
+          <div><small>{t('시도 횟수', 'Attempts')}</small><strong>{result.attempts}</strong>{result.isBestAttempts && <em>{t('최소!', 'Fewest!')}</em>}</div>
+          <div><small>{t('정답률', 'Accuracy')}</small><strong>{result.accuracy}%</strong><span>{t('최대 콤보', 'Best combo')} {result.bestCombo}</span></div>
         </section>
         <div className="memory-result-actions">
-          <button className="primary-button" onClick={() => startGame(result.mode, result.difficulty, result.daily)}>다시 하기</button>
-          <button className="secondary-button" onClick={() => setScreen('levels')}>다른 모드 도전</button>
-          <button className="secondary-button" onClick={() => setScreen('collection')}>내 배지 도감 보기</button>
-          <button className="text-button" onClick={onExit}>홈으로 이동</button>
+          <button className="primary-button" onClick={() => startGame(result.mode, result.difficulty, result.daily)}>{t('다시 하기', 'Play again')}</button>
+          <button className="secondary-button" onClick={() => setScreen('levels')}>{t('다른 모드 도전', 'Try another mode')}</button>
+          <button className="secondary-button" onClick={() => setScreen('collection')}>{t('내 배지 도감 보기', 'See my badge book')}</button>
+          <button className="text-button" onClick={onExit}>{t('홈으로 이동', 'Go home')}</button>
         </div>
       </main>
     );
@@ -334,20 +342,20 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMat
   const todayCompleted = records.dailyBadges.includes(todayKey());
   return (
     <main className="screen memory-level-screen">
-      <header className="top-bar"><button className="icon-button" onClick={onExit} aria-label="홈으로 돌아가기">←</button><strong>기억력 챌린지</strong><span /></header>
+      <header className="top-bar"><button className="icon-button" onClick={onExit} aria-label={t('홈으로 돌아가기', 'Return home')}>←</button><strong>{t('기억력 챌린지', 'Memory Challenge')}</strong><span /></header>
       <section className="memory-hero">
         <GuideCharacter className="memory-guide" decorative />
-        <span><p className="eyebrow">뜻이 통하는 두 장을 찾아요</p><h1>놀면서 배우는<br />기억력 게임</h1></span>
+        <span><p className="eyebrow">{t('뜻이 통하는 두 장을 찾아요', 'Find two cards with connected meanings')}</p><h1>{t('놀면서 배우는', 'Learn while playing')}<br />{t('기억력 게임', 'a memory game')}</h1></span>
       </section>
       {savedProgress && (
         <button className="memory-resume-card" onClick={resume}>
           <span aria-hidden="true">▶</span><span><strong>{savedProgress.daily ? '오늘의 도전' : memoryModeInfo[savedProgress.mode].label} 이어서 하기</strong><small>{savedProgress.matchedCardIds.length / 2}쌍 찾음 · {formatMemoryTime(savedProgress.elapsedMs)}</small></span><b>›</b>
         </button>
       )}
-      <button className={`memory-daily-card ${todayCompleted ? 'is-complete' : ''}`} onClick={() => startGame('mixed', 'growing', true)}>
+      <button className={`memory-daily-card ${todayCompleted ? 'is-complete' : ''}`} onClick={() => startGame('mixed', difficulty, true)}>
         <span aria-hidden="true">{todayCompleted ? '🏅' : '🌞'}</span>
-        <span><strong>오늘의 기억력 챌린지</strong><small>{todayCompleted ? '오늘의 배지를 받았어요! 다시 도전할까요?' : '매일 새로운 통합 카드 · 완료하면 특별 배지'}</small></span>
-        <b>{todayCompleted ? '완료' : '추천'}</b>
+        <span><strong>{t('오늘의 기억력 챌린지', "Today's Memory Challenge")}</strong><small>{todayCompleted ? t('오늘의 배지를 받았어요! 다시 도전할까요?', "You earned today's badge. Try again?") : t('매일 새로운 통합 카드 · 완료하면 특별 배지', 'New mixed cards daily · finish for a special badge')}</small></span>
+        <b>{todayCompleted ? t('완료', 'Done') : t('추천', 'Pick')}</b>
       </button>
       <button className="memory-collection-card" onClick={() => setScreen('collection')}>
         <span aria-hidden="true">🏅</span>
@@ -355,7 +363,7 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMat
         <b aria-hidden="true">›</b>
       </button>
       <fieldset className="memory-option-section">
-        <legend>어떤 카드로 놀까요?</legend>
+        <legend>{t('어떤 카드로 놀까요?', 'Which cards would you like?')}</legend>
         <div className="memory-mode-grid">
           {MEMORY_MODES.map((item) => {
             const info = memoryModeInfo[item];
@@ -364,7 +372,7 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMat
         </div>
       </fieldset>
       <fieldset className="memory-option-section">
-        <legend>몇 장에 도전할까요?</legend>
+        <legend>{t('몇 장에 도전할까요?', 'How many cards will you try?')}</legend>
         <div className="memory-difficulty-grid">
           {MEMORY_DIFFICULTIES.map((item) => {
             const info = memoryDifficultyInfo[item];
@@ -373,9 +381,9 @@ function MemoryMode({ onExit, soundEnabled, animationsEnabled, onLanguagePairMat
         </div>
       </fieldset>
       {currentRecord && <aside className="memory-best"><span>🏆</span><div><strong>나의 최고 기록</strong><small>{formatMemoryTime(currentRecord.bestTimeMs)} · 최소 {currentRecord.minAttempts}번 · 별 {currentRecord.totalStars}개</small></div></aside>}
-      <button className="primary-button memory-start" onClick={() => startGame()}>카드 {memoryDifficultyInfo[difficulty].pairCount * 2}장 시작할래요</button>
-      <p className="memory-rule">같은 그림이 아니라 <strong>뜻이 연결되는 카드</strong>를 찾아요.</p>
-      {storageWarning && <p className="memory-warning">기록 저장 공간을 확인해 주세요. 게임은 계속할 수 있어요.</p>}
+      <button className="primary-button memory-start" onClick={() => startGame()}>{t(`카드 ${memoryDifficultyInfo[difficulty].pairCount * 2}장 시작할래요`, `Start with ${memoryDifficultyInfo[difficulty].pairCount * 2} cards`)}</button>
+      <p className="memory-rule">{t('같은 그림이 아니라', 'Match')} <strong>{t('뜻이 연결되는 카드', 'cards with connected meanings')}</strong>{t('를 찾아요.', ', not identical pictures.')}</p>
+      {storageWarning && <p className="memory-warning">{t('기록 저장 공간을 확인해 주세요. 게임은 계속할 수 있어요.', 'Please check record storage. You can keep playing.')}</p>}
     </main>
   );
 }

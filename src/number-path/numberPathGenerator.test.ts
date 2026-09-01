@@ -62,6 +62,12 @@ describe('숫자 다리 문제 생성기', () => {
     expect(new Set(first.puzzles.map(numberPathPuzzleSignature)).size).toBe(NUMBER_PATH_SESSION_LENGTH);
   });
 
+  it('중간 섬 높이도 시드에 따라 달라져 보드 모양이 반복되지 않는다', () => {
+    const lanePatterns = new Set(Array.from({ length: 30 }, (_, index) =>
+      generateNumberPathPuzzle('growing', new SeededRandom(index + 1)).nodes.map((node) => node.lane).join(',')));
+    expect(lanePatterns.size).toBeGreaterThan(5);
+  });
+
   it('무작위 생성이 반복되어도 서로 다른 비상 문제로 세션을 채운다', () => {
     const progress = createNumberPathProgress('starter', { next: () => 0 });
     expect(progress.puzzles.some((puzzle) => puzzle.id.includes('fallback'))).toBe(true);

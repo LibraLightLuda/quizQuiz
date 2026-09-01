@@ -130,7 +130,7 @@ test('아이템 정원은 라인 아이템을 얻어 폭탄·회전·리롤로 �
   await page.getByRole('button', { name: '이어 하던 정원 열기' }).click();
   await page.getByRole('button', { name: '씨앗 한 칸' }).click();
   await page.getByRole('gridcell', { name: '1행 8열, 빈칸' }).click();
-  await expect(page.getByText(/2×2 폭탄 · 조각 회전 · 조각 바꾸기 획득!/)).toBeVisible();
+  await expect(page.getByText(/2×2 폭탄.*조각 회전.*조각 바꾸기.*획득!/)).toBeVisible();
 
   await page.getByRole('button', { name: '세로 세 칸' }).click();
   await page.locator('.garden-toolbox button').filter({ hasText: '회전' }).click();

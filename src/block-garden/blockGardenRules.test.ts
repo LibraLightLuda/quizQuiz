@@ -117,6 +117,14 @@ describe('빈칸 정원 핵심 규칙', () => {
     expect(anyTrayPieceFits(board, tray)).toBe(true);
   });
 
+  it('새 묶음은 이전 묶음과 적어도 두 모양이 다르다', () => {
+    const board = emptyGardenBoard();
+    const previous = ['seed', 'line-2-h', 'line-2-v'];
+    const upcoming: GardenPiece = { uid: 'preview', shapeId: 'seed', tone: 'sun' };
+    const tray = createGardenRefillTray(board, new SeededRandom(31), upcoming, previous);
+    expect(tray.filter((item) => !previous.includes(item.shapeId))).toHaveLength(2);
+  });
+
   it('회전 아이템은 자유롭게 모양을 90도 돌린다', () => {
     const game = createGardenGame(new SeededRandom(4), new Date(), { mode: 'items' });
     game.tray = [piece('line-3-h'), null, null];

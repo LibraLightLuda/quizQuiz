@@ -83,8 +83,17 @@ const distractorsFor = (
 };
 
 export const generateMathQuestion = (context: MathContext): Question => {
+  const operations = ['math-add', 'math-subtract', 'math-multiply'] as const;
   const operation: MathOperation = context.mode === 'math-mixed'
-    ? pick(context.random, ['math-add', 'math-subtract', 'math-multiply'] as const)
+    ? (() => {
+        const recent = context.recentSignatures.slice(-15);
+        const counts = operations.map((candidate) => ({
+          candidate,
+          count: recent.filter((signature) => signature.startsWith(`math-mixed:${candidate}:`)).length
+        }));
+        const minimum = Math.min(...counts.map((entry) => entry.count));
+        return pick(context.random, counts.filter((entry) => entry.count === minimum).map((entry) => entry.candidate));
+      })()
     : context.mode;
   let operands: number[] = [];
   let signature = '';

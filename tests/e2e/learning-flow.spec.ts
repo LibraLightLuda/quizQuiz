@@ -29,6 +29,20 @@ const finishWithFirstChoices = async (page: Page, startIndex = 0) => {
   await expect(page.locator('.result-screen')).toBeVisible({ timeout: 3000 });
 };
 
+const answerCurrentAdventureActivity = async (page: Page) => {
+  const activity = (await page.locator('.activity-guide strong').innerText()).trim();
+  if (await page.locator('.tile-build-board').count()) {
+    const tileCount = await page.locator('.tile-slot').count();
+    for (let index = 0; index < tileCount; index += 1) {
+      await page.locator('.word-tile:not([disabled])').first().click();
+    }
+    await page.getByRole('button', { name: '완성했어요' }).click();
+  } else {
+    await page.locator('.activity-option:not([disabled])').first().click();
+  }
+  return activity;
+};
+
 const installSpeechMock = async (page: Page) => {
   await page.addInitScript(() => {
     class MockUtterance {
@@ -135,13 +149,15 @@ test('말놀이 탐험에서 그림·소리·조립·문장 활동을 한 화면
   await page.setViewportSize({ width: 320, height: 568 });
   await installSpeechMock(page);
   await start(page, /한국어 우리말/, /말놀이 탐험/);
-  const expectedActivities = ['그림 연결', '소리 찾기', '낱말 조립', '낱말 조립', '문장 완성'];
-  for (let index = 0; index < expectedActivities.length; index += 1) {
-    await expect(page.locator('.activity-guide').getByText(expectedActivities[index], { exact: true })).toBeVisible();
+  const activities: string[] = [];
+  let checkedTileHint = false;
+  for (let index = 0; index < SESSION_LENGTH; index += 1) {
+    const activity = (await page.locator('.activity-guide strong').innerText()).trim();
+    activities.push(activity);
     await expect(page.locator('.timer-card')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    if (index === 0) await expect(page.locator('.activity-option-picture').first()).toBeVisible();
-    if (index === 4) {
+    if (activity === '그림 연결') await expect(page.locator('.activity-option-picture').first()).toBeVisible();
+    if (activity === '문장 완성') {
       await page.getByRole('button', { name: '문장 다시 듣기' }).click();
       await expect.poll(() => page.evaluate(() => (window as Window & { __speechRatesForTest: number[] }).__speechRatesForTest.at(-1))).toBe(0.85);
       await page.getByRole('button', { name: '느리게 문장 듣기' }).click();
@@ -149,15 +165,16 @@ test('말놀이 탐험에서 그림·소리·조립·문장 활동을 한 화면
     }
     if (await page.locator('.tile-build-board').count()) {
       const tileCount = await page.locator('.tile-slot').count();
-      if (index === 2) {
+      if (!checkedTileHint) {
         await page.getByRole('button', { name: '힌트 보기' }).click();
         await expect(page.locator('.tile-hint')).toBeVisible();
+        checkedTileHint = true;
       }
       for (let tileIndex = 0; tileIndex < tileCount; tileIndex += 1) {
         await page.locator('.word-tile:not([disabled])').first().click();
       }
       await page.getByRole('button', { name: '완성했어요' }).click();
-      if (index === 2) {
+      if (checkedTileHint) {
         await expect.poll(async () => page.evaluate(() => {
           const stored = JSON.parse(localStorage.getItem('numbercal.skill-mastery.v2') ?? 'null');
           return stored?.entries?.some((entry: { hintRate: number }) => entry.hintRate > 0) ?? false;
@@ -168,6 +185,8 @@ test('말놀이 탐험에서 그림·소리·조립·문장 활동을 한 화면
     }
     await page.getByRole('button', { name: index === 4 ? '오늘 찾은 것 보기' : '다음 친구' }).click();
   }
+  expect(new Set(activities)).toEqual(new Set(['그림 연결', '소리 찾기', '낱말 조립', '문장 완성']));
+  expect(activities.every((activity, index) => index === 0 || activity !== activities[index - 1])).toBe(true);
   await expect(page.locator('.result-screen')).toBeVisible();
 });
 
@@ -177,15 +196,19 @@ test('처음 만나는 언어 활동은 모리의 정답 시범 뒤 시작한다
   await page.getByRole('button', { name: /한국어 우리말/ }).click();
   await page.getByRole('button', { name: /말놀이 탐험/ }).click();
   await page.getByRole('button', { name: /작은 모험 시작/ }).click();
-  await expect(page.getByLabel('그림 연결 연습')).toContainText('모리가 먼저 보여줄게요!');
+  const demo = page.locator('.activity-demo');
+  const demoLabel = (await demo.getAttribute('aria-label'))!.replace(/ 연습$/, '');
+  await expect(demo).toContainText('모리가 먼저 보여줄게요!');
   await page.getByRole('button', { name: '이제 내가 해볼래요' }).click();
-  await expect(page.locator('.activity-guide').getByText('그림 연결', { exact: true })).toBeVisible();
+  await expect(page.locator('.activity-guide').getByText(demoLabel, { exact: true })).toBeVisible();
 });
 
 test('쓰기모험의 Word Quest도 키보드 없이 네 개의 터치 보기로 시작한다', async ({ page }) => {
   await start(page, /영어 영어 단어/, /Word Quest/, /쓰기모험/);
   await expect(page.locator('.answer-form')).toHaveCount(0);
-  await expect(page.locator('.activity-option')).toHaveCount(4);
+  const choiceCount = await page.locator('.activity-option').count();
+  const tileCount = await page.locator('.word-tile').count();
+  expect(choiceCount === 4 || tileCount >= 3).toBe(true);
 });
 test('Word Quest의 소리가 실패해도 터치 글자 문제 뒤 탐험을 계속한다', async ({ page }) => {
   await page.addInitScript(() => {
@@ -197,14 +220,23 @@ test('Word Quest의 소리가 실패해도 터치 글자 문제 뒤 탐험을 �
     });
   });
   await start(page, /영어 영어 단어/, /Word Quest/, /쓰기모험/);
-  await page.locator('.activity-option:not([disabled])').first().click();
-  await page.getByRole('button', { name: '다음 친구' }).click();
-  await page.getByRole('button', { name: '글자 문제로 바꾸기' }).click();
-  await expect(page.locator('.answer-form')).toHaveCount(0);
-  await expect(page.locator('.option-button')).toHaveCount(4);
-  await page.locator('.option-button:not([disabled])').first().click();
-  await page.getByRole('button', { name: '다음 친구' }).click();
-  await expect(page.locator('.activity-guide').getByText('낱말 조립', { exact: true })).toBeVisible();
+  let usedFallback = false;
+  for (let index = 0; index < 4; index += 1) {
+    const activity = (await page.locator('.activity-guide strong').innerText()).trim();
+    if (activity === '소리 찾기') {
+      await page.getByRole('button', { name: '글자 문제로 바꾸기' }).click();
+      await expect(page.locator('.answer-form')).toHaveCount(0);
+      await expect(page.locator('.option-button')).toHaveCount(4);
+      await page.locator('.option-button:not([disabled])').first().click();
+      usedFallback = true;
+    } else {
+      await answerCurrentAdventureActivity(page);
+    }
+    await page.getByRole('button', { name: '다음 친구' }).click();
+    if (usedFallback) break;
+  }
+  expect(usedFallback).toBe(true);
+  await expect(page.locator('.activity-guide')).toBeVisible();
 });
 test('수학 사칙연산 탭에서 혼합 문제가 출제된다', async ({ page }) => {
   await start(page, /수학 더하고/, /사칙연산/);

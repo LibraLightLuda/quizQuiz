@@ -3,6 +3,8 @@ import type { Question, QuestionStatus } from '../domain/types';
 import { ConceptPicture } from '../visuals/ConceptPicture';
 import { GuideCharacter } from '../visuals/GuideCharacter';
 import { questionConceptIds } from '../visuals/visualAssets';
+import { useLocale } from '../i18n/LocaleContext';
+import { activityInstruction, activityLabel } from '../i18n/catalog';
 
 interface Props {
   question: Question;
@@ -35,6 +37,7 @@ const demoStorageKey = (question: Question): string =>
 export function LanguageActivityRenderer({
   question, status, selectedOptionId, paused, onSelect, onHint
 }: Props) {
+  const { locale, t } = useLocale();
   const activity = question.activity;
   const [chosenTileIds, setChosenTileIds] = useState<string[]>([]);
   const [hintLevel, setHintLevel] = useState(0);
@@ -53,13 +56,13 @@ export function LanguageActivityRenderer({
   if (demoVisible) {
     const demo = activityDemo[activity.kind];
     return (
-      <section className="activity-demo" aria-label={`${activity.title} 연습`}>
+      <section className="activity-demo" aria-label={t(`${activity.title} 연습`, `${activityLabel(activity.kind, locale)} practice`)}>
         <GuideCharacter className="activity-demo-guide" decorative />
-        <div><strong>모리가 먼저 보여줄게요!</strong><p>{demo.example}</p><small>{demo.explanation}</small></div>
+        <div><strong>{t('모리가 먼저 보여줄게요!', 'Mori will show you first!')}</strong><p>{demo.example}</p><small>{demo.explanation}</small></div>
         <button type="button" className="primary-button" onClick={() => {
           try { localStorage.setItem(demoStorageKey(question), 'done'); } catch { /* 시범은 계속 진행할 수 있다. */ }
           setDemoVisible(false);
-        }}>이제 내가 해볼래요</button>
+        }}>{t('이제 내가 해볼래요', 'Let me try')}</button>
       </section>
     );
   }
@@ -89,21 +92,21 @@ export function LanguageActivityRenderer({
   };
 
   return (
-    <section className={'language-activity activity-' + activity.optionStyle} aria-label={activity.title}>
+    <section className={'language-activity activity-' + activity.optionStyle} aria-label={activityLabel(activity.kind, locale)}>
       <header className="activity-guide">
         <span aria-hidden="true">{activityIcon[activity.kind]}</span>
-        <div><strong>{activity.title}</strong><small>{activity.instruction}</small></div>
+        <div><strong>{activityLabel(activity.kind, locale)}</strong><small>{activityInstruction(activity.kind, locale)}</small></div>
       </header>
       {activity.optionStyle === 'tiles' ? (
         <div className="tile-build-board">
-          <div className="tile-slots" aria-label="내가 만든 낱말" aria-live="polite">
+          <div className="tile-slots" aria-label={t('내가 만든 낱말', 'Word I built')} aria-live="polite">
             {Array.from({ length: targetTileCount }, (_, index) => (
               <span className={'tile-slot ' + (chosenTiles[index] ? 'filled' : '')} key={index}>
                 {chosenTiles[index]?.label ?? <span aria-hidden="true">?</span>}
               </span>
             ))}
           </div>
-          <div className="word-tile-pool" role="group" aria-label="낱말 타일">
+          <div className="word-tile-pool" role="group" aria-label={t('낱말 타일', 'Word tiles')}>
             {tiles.map((tile) => (
               <button
                 type="button"
@@ -116,9 +119,9 @@ export function LanguageActivityRenderer({
           </div>
           <div className="tile-actions">
             <button type="button" className="small-button" disabled={disabled || chosenTileIds.length === 0}
-              onClick={() => setChosenTileIds((ids) => ids.slice(0, -1))}>하나 되돌리기</button>
+              onClick={() => setChosenTileIds((ids) => ids.slice(0, -1))}>{t('하나 되돌리기', 'Undo one')}</button>
             <button type="button" className="small-button" disabled={disabled || chosenTileIds.length === 0}
-              onClick={() => setChosenTileIds([])}>다시 놓기</button>
+              onClick={() => setChosenTileIds([])}>{t('다시 놓기', 'Reset tiles')}</button>
           </div>
           {hintLevel > 0 && activity.hintSteps && (
             <p className="tile-hint" role="status">💡 {activity.hintSteps[hintLevel - 1]}</p>
@@ -126,20 +129,20 @@ export function LanguageActivityRenderer({
           <div className="tile-submit-row">
             {!!activity.hintSteps?.length && hintLevel < activity.hintSteps.length && (
               <button type="button" className="small-button hint-button" disabled={disabled} onClick={showNextHint}>
-                {hintLevel === 0 ? '힌트 보기' : '힌트 한 단계 더'}
+                {hintLevel === 0 ? t('힌트 보기', 'Show hint') : t('힌트 한 단계 더', 'Another hint')}
               </button>
             )}
             <button type="button" className="tile-submit" disabled={disabled || chosenTileIds.length !== targetTileCount}
-              onClick={submitTiles}>완성했어요</button>
+              onClick={submitTiles}>{t('완성했어요', 'Done')}</button>
           </div>
           {status === 'feedback' && (
             <p className={'tile-result ' + (selectedOptionId === question.correctOptionId ? 'correct' : 'incorrect')}>
-              내가 만든 낱말: <strong>{assembled || '—'}</strong>
+              {t('내가 만든 낱말:', 'My word:')} <strong>{assembled || '—'}</strong>
             </p>
           )}
         </div>
       ) : (
-        <div className={'activity-option-grid activity-options-' + question.options.length} role="group" aria-label={activity.title + ' 보기'}>
+        <div className={'activity-option-grid activity-options-' + question.options.length} role="group" aria-label={t(`${activity.title} 보기`, `${activityLabel(activity.kind, locale)} choices`)}>
           {question.options.map((option) => {
             const selected = selectedOptionId === option.id;
             const correct = status === 'feedback' && option.id === question.correctOptionId;
@@ -157,8 +160,8 @@ export function LanguageActivityRenderer({
                   <ConceptPicture conceptId={conceptId} className="activity-option-picture" />
                 )}
                 <span>{option.label}</span>
-                {correct && <b aria-label="정답">✓</b>}
-                {incorrect && <b aria-label="선택한 답">•</b>}
+                {correct && <b aria-label={t('정답', 'Correct answer')}>✓</b>}
+                {incorrect && <b aria-label={t('선택한 답', 'Selected answer')}>•</b>}
               </button>
             );
           })}

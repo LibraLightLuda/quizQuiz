@@ -18,6 +18,10 @@ import {
 import { useGrowth } from '../growth/GrowthContext';
 import { GrowthCelebration, GrowthRewardCard } from '../growth/GrowthUI';
 import type { GrowthAward } from '../growth/types';
+import { useLocale } from '../i18n/LocaleContext';
+import {
+  createGenerationIssue, hashContentSeed, localDateKey, recordIssuedFingerprints
+} from '../services/contentVarietyService';
 import './block-garden.css';
 
 type GardenCss = CSSProperties & Record<'--piece-columns' | '--piece-rows', number>;
@@ -45,19 +49,6 @@ const ITEM_INFO: Record<GardenItem, { icon: string; name: string }> = {
   stone: { icon: '▰', name: '돌 함정' }
 };
 
-const localDateKey = (date = new Date()): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const dailySeed = (dateKey: string): number => {
-  let hash = 2166136261;
-  for (const character of dateKey) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
-  return hash >>> 0 || 1;
-};
-
 function PiecePreview({ piece }: { piece: GardenPiece }) {
   const gardenShape = shapeForPiece(piece)!;
   const rows = Math.max(...gardenShape.cells.map((cell) => cell.row)) + 1;
@@ -83,6 +74,7 @@ const scoreMessage = (cleared: number, combo: number, gain: number): string => {
 };
 
 export default function BlockGardenMode({ onExit, soundEnabled, animationsEnabled }: BlockGardenModeProps) {
+  const { t } = useLocale();
   const growth = useGrowth();
   const random = useRef(new CryptoRandom());
   const initialProgress = useRef(loadGardenProgress()).current;
@@ -92,7 +84,7 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [draggingSlot, setDraggingSlot] = useState<number | null>(null);
   const [previewAnchor, setPreviewAnchor] = useState<number | null>(null);
-  const [notice, setNotice] = useState('아래 조각 하나를 고른 뒤 빈칸을 눌러 보세요.');
+  const [notice, setNotice] = useState(() => t('아래 조각 하나를 고른 뒤 빈칸을 눌러 보세요.', 'Choose a piece below, then tap an empty cell.'));
   const [noticeTone, setNoticeTone] = useState<NoticeTone>('neutral');
   const [newBest, setNewBest] = useState(false);
   const [growthAward, setGrowthAward] = useState<GrowthAward | null>(null);
@@ -126,12 +118,28 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
 
   const startNewGame = (mode: GardenMode = 'classic') => {
     const dateKey = localDateKey();
-    const gameRandom = mode === 'daily' ? new SeededRandom(dailySeed(dateKey)) : random.current;
-    const next = createGardenGame(gameRandom, new Date(), {
+    const issue = createGenerationIssue({
+      sectionId: 'block-garden', variant: mode, daily: mode === 'daily', dateKey: mode === 'daily' ? dateKey : undefined
+    });
+    let retry = 0;
+    let gameRandom = new SeededRandom(hashContentSeed(issue.seed));
+    let next = createGardenGame(gameRandom, new Date(), {
       mode,
       dailyDate: mode === 'daily' ? dateKey : undefined,
       dailyTargetLines: mode === 'daily' ? 12 : undefined
     });
+    const openingSignature = (candidate: GardenGame) =>
+      [...candidate.tray.map((piece) => piece?.shapeId ?? '-'), candidate.nextPiece?.shapeId ?? '-'].join('|');
+    while (retry < 6 && issue.excludedFingerprints.includes(openingSignature(next))) {
+      retry += 1;
+      gameRandom = new SeededRandom(hashContentSeed(`${issue.seed}:${retry}`));
+      next = createGardenGame(gameRandom, new Date(), {
+        mode,
+        dailyDate: mode === 'daily' ? dateKey : undefined,
+        dailyTargetLines: mode === 'daily' ? 12 : undefined
+      });
+    }
+    recordIssuedFingerprints(issue, [openingSignature(next)]);
     if (mode === 'daily' && gameRandom instanceof SeededRandom) next.randomState = gameRandom.getState();
     setGame(next);
     setSelectedSlot(null);
@@ -202,7 +210,7 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
       return;
     }
     const savedRandom = saved.mode === 'daily'
-      ? new SeededRandom(saved.randomState ?? dailySeed(saved.dailyDate ?? localDateKey()))
+      ? new SeededRandom(saved.randomState ?? hashContentSeed(saved.dailyDate ?? localDateKey()))
       : random.current;
     const hydrated = saved.nextPiece ? saved : {
       ...saved,
@@ -233,21 +241,21 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
     if (!game || game.status !== 'playing') return;
     const slot = forcedSlot ?? selectedSlot;
     if (slot === null) {
-      setNotice('먼저 아래 조각 하나를 골라 주세요.');
+      setNotice(t('먼저 아래 조각 하나를 골라 주세요.', 'Choose a piece below first.'));
       setNoticeTone('neutral');
       return;
     }
     const row = Math.floor(cellIndex / BOARD_SIZE);
     const column = cellIndex % BOARD_SIZE;
     const gameRandom = game.mode === 'daily'
-      ? new SeededRandom(game.randomState ?? dailySeed(game.dailyDate ?? localDateKey()))
+      ? new SeededRandom(game.randomState ?? hashContentSeed(game.dailyDate ?? localDateKey()))
       : random.current;
     const rawResult = placeGardenPiece(game, slot, row, column, gameRandom);
     const result = game.mode === 'daily' && gameRandom instanceof SeededRandom
       ? { ...rawResult, game: { ...rawResult.game, randomState: gameRandom.getState() } }
       : rawResult;
     if (!result.placed) {
-      setNotice('그 자리에는 놓을 수 없어요. 조각이 모두 들어가는 다른 빈칸을 찾아보세요.');
+      setNotice(t('그 자리에는 놓을 수 없어요. 조각이 모두 들어가는 다른 빈칸을 찾아보세요.', 'That piece does not fit there. Find another open space for the whole piece.'));
       setNoticeTone('error');
       return;
     }
@@ -298,14 +306,14 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
     if (!game || activeTool !== 'bomb') return;
     const next = useGardenBomb(game, Math.floor(cellIndex / BOARD_SIZE), cellIndex % BOARD_SIZE);
     if (!next) {
-      setNotice('폭탄은 색깔 블록이 있는 2×2 자리에 사용할 수 있어요.');
+      setNotice(t('폭탄은 색깔 블록이 있는 2×2 자리에 사용할 수 있어요.', 'The bomb works on a 2×2 area containing colored blocks.'));
       setNoticeTone('error');
       return;
     }
     setGame(next);
     setActiveTool(null);
     setPreviewAnchor(null);
-    setNotice('2×2 폭탄으로 블록을 치웠어요! 회색 돌은 그대로 남아요.');
+    setNotice(t('2×2 폭탄으로 블록을 치웠어요! 회색 돌은 그대로 남아요.', 'The 2×2 bomb cleared the blocks. Gray stones remain.'));
     setNoticeTone('success');
     if (next.status === 'game-over') finishGame(next);
     else if (!saveGardenProgress(next)) setStorageWarning(true);
@@ -318,19 +326,19 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
       return;
     }
     const gameRandom = game.mode === 'daily'
-      ? new SeededRandom(game.randomState ?? dailySeed(game.dailyDate ?? localDateKey()))
+      ? new SeededRandom(game.randomState ?? hashContentSeed(game.dailyDate ?? localDateKey()))
       : random.current;
     const next = tool === 'rotate'
       ? rotateGardenPiece(game, selectedSlot)
       : rerollGardenPiece(game, selectedSlot, gameRandom);
     if (!next) {
-      setNotice(tool === 'rotate' ? '이 조각은 돌려도 같은 모양이에요. 다른 조각을 골라 보세요.' : '지금은 이 조각을 바꿀 수 없어요.');
+      setNotice(tool === 'rotate' ? t('이 조각은 돌려도 같은 모양이에요. 다른 조각을 골라 보세요.', 'This piece looks the same when rotated. Choose another piece.') : t('지금은 이 조각을 바꿀 수 없어요.', 'This piece cannot be changed now.'));
       setNoticeTone('error');
       return;
     }
     setGame(next);
     setPreviewAnchor(null);
-    setNotice(tool === 'rotate' ? '조각을 90도 돌렸어요. 새 자리를 찾아보세요.' : '조각을 새 모양으로 바꿨어요.');
+    setNotice(tool === 'rotate' ? t('조각을 90도 돌렸어요. 새 자리를 찾아보세요.', 'The piece rotated 90 degrees. Find a new place.') : t('조각을 새 모양으로 바꿨어요.', 'The piece changed to a new shape.'));
     setNoticeTone('success');
     if (!saveGardenProgress(next)) setStorageWarning(true);
   };
@@ -380,7 +388,7 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
     setPreviewAnchor(null);
     setNoticeTone('neutral');
     if (nextSlot === null) {
-      setNotice('조각을 다시 골라도 좋아요. 아래 조각 하나를 눌러 주세요.');
+      setNotice(t('조각을 다시 골라도 좋아요. 아래 조각 하나를 눌러 주세요.', 'You can choose again. Tap one of the pieces below.'));
       return;
     }
     setNotice(`${shapeForPiece(piece)?.label ?? '조각'}을 골랐어요. 판의 빈칸을 눌러 놓아 보세요.`);
@@ -414,15 +422,15 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
     const dailyDone = records.dailyCompletedDates?.includes(today) ?? false;
     return (
       <main className="screen block-garden-screen garden-home-screen">
-        <header className="game-topbar"><button className="back-button" onClick={onExit} aria-label="홈으로 돌아가기">‹</button><strong>빈칸 정원</strong><span aria-hidden="true" /></header>
+        <header className="game-topbar"><button className="back-button" onClick={onExit} aria-label={t('홈으로 돌아가기', 'Return home')}>‹</button><strong>{t('빈칸 정원', 'Block Garden')}</strong><span aria-hidden="true" /></header>
         <section className="garden-hero">
-          <div><p className="eyebrow">천천히 생각하는 공간 퍼즐</p><h1>빈칸을 남겨<br />정원을 피워요</h1><p>세 조각을 미리 보고, 다음 조각이 들어갈 자리까지 생각해 보세요.</p></div>
+          <div><p className="eyebrow">{t('천천히 생각하는 공간 퍼즐', 'A thoughtful space puzzle')}</p><h1>{t('빈칸을 남겨', 'Keep space open')}<br />{t('정원을 피워요', 'and grow the garden')}</h1><p>{t('세 조각을 미리 보고, 다음 조각이 들어갈 자리까지 생각해 보세요.', 'Preview all three pieces and plan space for what comes next.')}</p></div>
           <span className="garden-hero-icon"><BlockGardenIcon /></span>
         </section>
-        <section className="garden-rule-grid" aria-label="놀이 방법">
-          <article><span>1</span><strong>세 조각 살피기</strong><p>순서를 바꿔 놓을 수 있어요.</p></article>
-          <article><span>2</span><strong>가로·세로 피우기</strong><p>한 줄을 채우면 빈칸으로 돌아와요.</p></article>
-          <article><span>3</span><strong>큰 빈칸 지키기</strong><p>놓을 곳이 없으면 한 판이 끝나요.</p></article>
+        <section className="garden-rule-grid" aria-label={t('놀이 방법', 'How to play')}>
+          <article><span>1</span><strong>{t('세 조각 살피기', 'Preview three pieces')}</strong><p>{t('순서를 바꿔 놓을 수 있어요.', 'Place them in any order.')}</p></article>
+          <article><span>2</span><strong>{t('가로·세로 피우기', 'Complete rows and columns')}</strong><p>{t('한 줄을 채우면 빈칸으로 돌아와요.', 'A complete line clears into open space.')}</p></article>
+          <article><span>3</span><strong>{t('큰 빈칸 지키기', 'Protect large spaces')}</strong><p>{t('놓을 곳이 없으면 한 판이 끝나요.', 'The game ends when no piece fits.')}</p></article>
         </section>
         <section className="garden-record-card" aria-label="빈칸 정원 기록">
           <div><small>최고 점수</small><strong>{records.highScore.toLocaleString()}</strong></div>
@@ -441,9 +449,9 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
         </section>
         {storageWarning && <p className="garden-storage-warning" role="status">이 기기에서는 기록을 저장할 수 없어요. 지금 놀이는 계속할 수 있어요.</p>}
         <div className="garden-home-actions">
-          {hasProgress && <button className="primary-button" onClick={resumeGame}>이어 하던 정원 열기</button>}
+          {hasProgress && <button className="primary-button" onClick={resumeGame}>{t('이어 하던 정원 열기', 'Continue saved garden')}</button>}
           <section className="garden-mode-picker" aria-labelledby="garden-mode-title">
-            <div className="garden-mode-heading"><small>놀이 모드</small><strong id="garden-mode-title">어떤 정원을 가꿀까요?</strong></div>
+            <div className="garden-mode-heading"><small>{t('놀이 모드', 'Game mode')}</small><strong id="garden-mode-title">{t('어떤 정원을 가꿀까요?', 'Which garden will you grow?')}</strong></div>
             <div className="garden-mode-grid">
               {(Object.entries(MODE_INFO) as Array<[Exclude<GardenMode, 'daily'>, typeof MODE_INFO[Exclude<GardenMode, 'daily'>]]>).map(([mode, info]) => (
                 <button key={mode} type="button" onClick={() => requestNewGame(mode)}>
@@ -453,17 +461,17 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
             </div>
           </section>
           <button className="garden-daily-button" onClick={() => requestNewGame('daily')} disabled={dailyDone}>
-            {dailyDone ? '오늘의 정원 완료' : '오늘의 정원 도전 · 12줄'}
+            {dailyDone ? t('오늘의 정원 완료', "Today's Garden complete") : t('오늘의 정원 도전 · 12줄', "Today's Garden · 12 lines")}
           </button>
         </div>
         {pendingStartMode && <div className="modal-backdrop" role="presentation">
           <section className="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="garden-new-game-title">
             <span className="dialog-icon" aria-hidden="true">🌱</span>
-            <h2 id="garden-new-game-title">새 정원을 시작할까요?</h2>
-            <p>이어 하던 정원은 사라져요. 지금 정원을 계속 가꿀 수도 있어요.</p>
-            <button className="primary-button" onClick={() => setPendingStartMode(null)}>아니요, 이어서 할래요</button>
+            <h2 id="garden-new-game-title">{t('새 정원을 시작할까요?', 'Start a new garden?')}</h2>
+            <p>{t('이어 하던 정원은 사라져요. 지금 정원을 계속 가꿀 수도 있어요.', 'Your saved garden will be replaced. You can continue it instead.')}</p>
+            <button className="primary-button" onClick={() => setPendingStartMode(null)}>{t('아니요, 이어서 할래요', 'No, continue my garden')}</button>
             <button className="secondary-button" onClick={() => startNewGame(pendingStartMode)}>
-              {pendingStartMode === 'daily' ? '오늘의 정원 시작하기' : `${MODE_INFO[pendingStartMode].name} 시작하기`}
+              {pendingStartMode === 'daily' ? t('오늘의 정원 시작하기', "Start Today's Garden") : t(`${MODE_INFO[pendingStartMode].name} 시작하기`, 'Start new garden')}
             </button>
           </section>
         </div>}
@@ -483,7 +491,7 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
         {growthAward && <GrowthCelebration award={growthAward} animationsEnabled={animationsEnabled} />}
         <span className="garden-result-icon" aria-hidden="true">{newBest ? '🌟' : '🌿'}</span>
         <p className="eyebrow">{isDaily ? '오늘의 정원' : MODE_INFO[mode as Exclude<GardenMode, 'daily'>]?.name ?? '빈칸 정원'}</p>
-        <h1>{isDaily && game.dailyCompleted ? '오늘의 정원 완성!' : isTimed ? '90초 끝!' : newBest ? '새 최고 기록!' : '정원이 가득 찼어요'}</h1>
+        <h1>{isDaily && game.dailyCompleted ? t('오늘의 정원 완성!', "Today's Garden complete!") : isTimed ? t('90초 끝!', '90 seconds complete!') : newBest ? t('새 최고 기록!', 'New best score!') : t('정원이 가득 찼어요', 'The garden is full')}</h1>
         <p>{isDaily && game.dailyCompleted
           ? '오늘의 씨앗을 모두 피웠어요. 내일 새로운 정원에서 만나요.'
           : isTimed
@@ -494,10 +502,10 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
                 ? '아이템을 조금 더 일찍 쓰면 막힌 공간을 되살릴 수 있어요.'
                 : '빈칸을 지키는 선택을 바꿔 보면 다음 판은 더 오래 이어질 거예요.'}</p>
         {growthAward && <GrowthRewardCard award={growthAward} />}
-        <section className="garden-result-stats" aria-label="이번 놀이 결과">
-          <div><small>점수</small><strong>{game.score.toLocaleString()}</strong></div>
-          <div><small>피운 줄</small><strong>{game.clearedLines}</strong></div>
-          <div><small>놓은 조각</small><strong>{game.turns}</strong></div>
+        <section className="garden-result-stats" aria-label={t('이번 놀이 결과', 'Game results')}>
+          <div><small>{t('점수', 'Score')}</small><strong>{game.score.toLocaleString()}</strong></div>
+          <div><small>{t('피운 줄', 'Lines cleared')}</small><strong>{game.clearedLines}</strong></div>
+          <div><small>{t('놓은 조각', 'Pieces placed')}</small><strong>{game.turns}</strong></div>
         </section>
         <p className="garden-result-achievements">
           최고 콤보 {records.bestCombo ?? 0} · 한 번에 최대 {records.maxLinesInMove ?? 0}줄 · 이번 주 {Math.min(40, records.weeklyLines ?? 0)}/40줄
@@ -505,10 +513,10 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
         <p className="garden-result-goal" aria-label={`이 모드 최고 기록 ${modeBest.toLocaleString()}점, 다음 목표 ${nextGoal.toLocaleString()}점`}>
           이 모드 최고 {modeBest.toLocaleString()}점 · 다음 목표 {nextGoal.toLocaleString()}점
         </p>
-        {storageWarning && <p className="garden-storage-warning" role="status">이번 기록을 기기에 저장하지 못했어요.</p>}
-        <button className="primary-button" onClick={() => startNewGame(game.mode ?? 'classic')}>바로 다시 하기</button>
-        <button className="secondary-button" onClick={() => setGame(null)}>기록과 방법 보기</button>
-        <button className="text-button" onClick={onExit}>NumberCal 홈으로</button>
+        {storageWarning && <p className="garden-storage-warning" role="status">{t('이번 기록을 기기에 저장하지 못했어요.', 'This result could not be saved on the device.')}</p>}
+        <button className="primary-button" onClick={() => startNewGame(game.mode ?? 'classic')}>{t('바로 다시 하기', 'Play again')}</button>
+        <button className="secondary-button" onClick={() => setGame(null)}>{t('기록과 방법 보기', 'See records and rules')}</button>
+        <button className="text-button" onClick={onExit}>{t('NumberCal 홈으로', 'NumberCal home')}</button>
       </main>
     );
   }
@@ -525,9 +533,9 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
       onPointerCancel={cancelDrag}
     >
       <header className="garden-play-header">
-        <button className="back-button" onClick={onExit} aria-label="저장하고 홈으로 돌아가기">‹</button>
+        <button className="back-button" onClick={onExit} aria-label={t('저장하고 홈으로 돌아가기', 'Save and return home')}>‹</button>
         <div className={`garden-score-card ${placementFeedback ? 'is-score-burst' : ''}`} aria-live="polite">
-          <small>{game.mode === 'daily' ? '오늘의 점수' : '현재 점수'}</small><strong>{game.score.toLocaleString()}</strong>
+          <small>{game.mode === 'daily' ? t('오늘의 점수', "Today's score") : t('현재 점수', 'Current score')}</small><strong>{game.score.toLocaleString()}</strong>
           {placementFeedback && <em key={placementFeedback.id} aria-hidden="true">+{placementFeedback.gain}</em>}
         </div>
         <div className="garden-score-card is-best"><small>이 모드 최고</small><strong>{Math.max(currentModeBest, game.score).toLocaleString()}</strong></div>
@@ -537,10 +545,10 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
         <span><i style={{ width: `${Math.max(0, Math.min(100, timeRemaining / (game.timeLimitSeconds ?? TIMED_GARDEN_SECONDS) * 100))}%` }} /></span>
         <small>시간 안에 줄을 많이 피워요!</small>
       </section>}
-      <section className="garden-status-row" aria-label="놀이 상태">
-        <span>피운 줄 <b>{game.clearedLines}</b></span>
-        <span className={game.combo >= 2 ? 'is-combo' : ''}>연속 피우기 <b>{game.combo}</b></span>
-        <span>빈칸 <b>{game.board.length - game.board.filter(Boolean).length}</b></span>
+      <section className="garden-status-row" aria-label={t('놀이 상태', 'Game status')}>
+        <span>{t('피운 줄', 'Lines')} <b>{game.clearedLines}</b></span>
+        <span className={game.combo >= 2 ? 'is-combo' : ''}>{t('연속 피우기', 'Combo')} <b>{game.combo}</b></span>
+        <span>{t('빈칸', 'Open')} <b>{game.board.length - game.board.filter(Boolean).length}</b></span>
       </section>
       {game.mode === 'daily' && <div className="garden-daily-progress" aria-label={`오늘의 목표 ${game.dailyTargetLines ?? 12}줄 중 ${game.clearedLines}줄`}>
         <span><b>오늘의 정원</b> · {Math.min(game.clearedLines, game.dailyTargetLines ?? 12)} / {game.dailyTargetLines ?? 12}줄</span>
@@ -551,8 +559,8 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
         <small>회색 돌은 줄을 채우지만 지워지지 않아요.</small>
       </div>}
       {game.combo >= 2 && <p className="garden-combo-help" role="status">연속 피우기 {game.combo}회 · 다음 줄 제거에 보너스가 붙어요</p>}
-      <div className="garden-danger" role="progressbar" aria-label="정원이 찬 정도" aria-valuenow={danger} aria-valuemin={0} aria-valuemax={100}>
-        <span style={{ width: `${danger}%` }} /><small>{danger < 50 ? '빈칸이 넉넉해요' : danger < 75 ? '큰 자리를 지켜 주세요' : '줄을 피워 빈칸을 되찾아요'}</small>
+      <div className="garden-danger" role="progressbar" aria-label={t('정원이 찬 정도', 'How full the garden is')} aria-valuenow={danger} aria-valuemin={0} aria-valuemax={100}>
+        <span style={{ width: `${danger}%` }} /><small>{danger < 50 ? t('빈칸이 넉넉해요', 'Plenty of open space') : danger < 75 ? t('큰 자리를 지켜 주세요', 'Protect a large open area') : t('줄을 피워 빈칸을 되찾아요', 'Clear a line to regain space')}</small>
       </div>
       {game.mode === 'items' && <section className="garden-toolbox" aria-label="모은 정원 아이템">
         <button type="button" className={activeTool === 'bomb' ? 'is-active' : ''} aria-pressed={activeTool === 'bomb'} disabled={!game.inventory?.bomb}
@@ -599,7 +607,7 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
       </section>
       <p className={`garden-notice is-${noticeTone}`} aria-live="polite">{notice}</p>
       {storageWarning && <p className="garden-storage-warning" role="status">진행을 저장하지 못했어요. 현재 판은 계속할 수 있어요.</p>}
-      <section className="garden-tray" aria-label="놓을 조각 세 개">
+      <section className="garden-tray" aria-label={t('놓을 조각 세 개', 'Three pieces to place')}>
         {game.tray.map((piece, index) => {
           const fits = piece ? pieceFits(game.board, piece) : false;
           const gardenShape = piece ? shapeForPiece(piece) : undefined;
@@ -627,12 +635,12 @@ export default function BlockGardenMode({ onExit, soundEnabled, animationsEnable
         <div><small>다음 새싹</small><strong>다음 묶음 첫 조각</strong></div>
         <PiecePreview piece={game.nextPiece} />
       </section>}
-      {showGuide && <aside className="garden-coach-card" aria-label="첫 플레이 안내">
-        <strong>빈칸을 지키며 줄을 피워 보세요</strong>
-        <span>조각을 고른 뒤 보드의 빈칸을 누르거나, 그대로 끌어 놓으면 돼요.</span>
-        <button type="button" onClick={() => setShowGuide(false)}>알겠어요</button>
+      {showGuide && <aside className="garden-coach-card" aria-label={t('첫 플레이 안내', 'First game guide')}>
+        <strong>{t('빈칸을 지키며 줄을 피워 보세요', 'Protect open space while clearing lines')}</strong>
+        <span>{t('조각을 고른 뒤 보드의 빈칸을 누르거나, 그대로 끌어 놓으면 돼요.', 'Choose a piece, then tap an empty board cell or drag it into place.')}</span>
+        <button type="button" onClick={() => setShowGuide(false)}>{t('알겠어요', 'Got it')}</button>
       </aside>}
-      <p className="garden-control-help">조각을 끌어 놓거나, 조각을 고른 뒤 판의 빈칸을 누르세요.</p>
+      <p className="garden-control-help">{t('조각을 끌어 놓거나, 조각을 고른 뒤 판의 빈칸을 누르세요.', 'Drag a piece, or choose it and tap an empty cell.')}</p>
     </main>
   );
 }

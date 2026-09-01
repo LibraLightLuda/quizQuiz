@@ -8,7 +8,7 @@ import {
 } from './storyData';
 import {
   correctSequenceSceneIds, createStoryProgress, createStoryVocabularyMission,
-  dailyStory, isCorrectSequence, pickStory, storyDailyKey
+  isCorrectSequence, pickStory, storyDailyKey
 } from './storyGenerator';
 import {
   clearStoryProgress, loadStoryProgress, loadStoryRecords, rememberStoryLevel, saveStoryCompletion, saveStoryProgress
@@ -22,6 +22,8 @@ import { storyCoverVisuals, storySceneVisuals } from '../visuals/visualAssets';
 import { useGrowth } from '../growth/GrowthContext';
 import { GrowthCelebration, GrowthRewardCard } from '../growth/GrowthUI';
 import type { GrowthAward } from '../growth/types';
+import { useLocale } from '../i18n/LocaleContext';
+import { createGenerationIssue, randomForIssue, recordIssuedFingerprints } from '../services/contentVarietyService';
 import './story.css';
 
 type StoryScreen = 'home' | 'reading' | 'activity' | 'recall' | 'result' | 'library';
@@ -45,6 +47,11 @@ const replaceActivity = (
   updatedAt: new Date().toISOString()
 });
 
+const activityForProgress = (progress: StoryProgress): StoryActivity | undefined => {
+  const activityId = progress.activities[progress.activityIndex]?.activityId;
+  return storyById(progress.storyId)?.activities.find((activity) => activity.id === activityId);
+};
+
 export default function StoryMode({
   onExit, soundEnabled, ttsEnabled, speechRate, animationsEnabled, learnedWordIds, onMissionRecallCorrect
 }: {
@@ -56,6 +63,7 @@ export default function StoryMode({
   learnedWordIds: readonly string[];
   onMissionRecallCorrect?: (wordId: string, skillIds: readonly string[]) => void;
 }) {
+  const { t } = useLocale();
   const growth = useGrowth();
   const initialRecords = useMemo(() => loadStoryRecords(), []);
   const [records, setRecords] = useState<StoryRecords>(initialRecords);
@@ -73,6 +81,10 @@ export default function StoryMode({
   const inputLock = useRef(false);
   const lockTimer = useRef<number | null>(null);
   const selectedSequenceRef = useRef<string | null>(null);
+  const todayKey = storyDailyKey();
+  const dailySelectionIssue = useMemo(() => createGenerationIssue({
+    sectionId: 'story', variant: selectedLevel, daily: true, dateKey: todayKey
+  }), [selectedLevel, todayKey]);
 
   const clearSequenceSelection = () => {
     selectedSequenceRef.current = null;
@@ -134,7 +146,11 @@ export default function StoryMode({
     cancelSpeech();
     releaseInputLock();
     const dateKey = daily ? storyDailyKey() : undefined;
-    const next = createStoryProgress(story, daily, dateKey, random, missionVocabularyIds);
+    const issue = createGenerationIssue({
+      sectionId: 'story', variant: `${story.level}:${story.id}`, daily, dateKey
+    });
+    const next = createStoryProgress(story, daily, dateKey, randomForIssue(issue), missionVocabularyIds);
+    recordIssuedFingerprints(issue, [story.id, next.activities.map((activity) => activity.activityId).join('|')]);
     const nextRecords = rememberStoryLevel(records, story.level);
     setRecords(nextRecords);
     setSelectedLevel(story.level);
@@ -191,7 +207,7 @@ export default function StoryMode({
 
   const updateCurrentActivity = (update: (state: StoryActivityState) => StoryActivityState) => {
     if (!progress) return;
-    const activity = storyById(progress.storyId)?.activities[progress.activityIndex];
+    const activity = activityForProgress(progress);
     if (!activity) return;
     persist(replaceActivity(progress, activity.id, update));
   };
@@ -389,7 +405,7 @@ export default function StoryMode({
         </div>
         {reviewing && <aside className="story-review-banner" role="status">🔎 {message}</aside>}
         <article className="story-scene-card">
-          <span className="story-scene-number">{progress.pageIndex + 1}번째 장면</span>
+          <span className="story-scene-number">{t(`${progress.pageIndex + 1}번째 장면`, `Scene ${progress.pageIndex + 1}`)}</span>
           <StoryScenePicture sceneId={scene.id} fallback={scene.illustration} alt={scene.alt} featured />
           <p>{scene.text}</p>
           {sceneMissionWords.length > 0 && (
@@ -398,33 +414,33 @@ export default function StoryMode({
           {ttsEnabled && speechSupported() && (
             <div className="story-listen-actions">
               <button className={`story-listen-button ${speaking ? 'speaking' : ''}`} disabled={speaking} onClick={() => void readAloud(scene.text)}>
-                <span aria-hidden="true">🔊</span>{speaking ? '읽는 중이에요' : '이 장면 읽어 주기'}
+                <span aria-hidden="true">🔊</span>{speaking ? t('읽는 중이에요', 'Reading') : t('이 장면 읽어 주기', 'Read this scene')}
               </button>
-              <button className="story-slow-listen" disabled={speaking} onClick={() => void readAloud(scene.text, true)}><span aria-hidden="true">🐢</span>느리게 읽기</button>
+              <button className="story-slow-listen" disabled={speaking} onClick={() => void readAloud(scene.text, true)}><span aria-hidden="true">🐢</span>{t('느리게 읽기', 'Read slowly')}</button>
             </div>
           )}
         </article>
-        <nav className="story-page-actions" aria-label="이야기 장면 이동">
-          <button className="secondary-button" disabled={progress.pageIndex === 0} onClick={() => persist({ ...progress, pageIndex: progress.pageIndex - 1 })}>이전 장면</button>
+        <nav className="story-page-actions" aria-label={t('이야기 장면 이동', 'Move between story scenes')}>
+          <button className="secondary-button" disabled={progress.pageIndex === 0} onClick={() => persist({ ...progress, pageIndex: progress.pageIndex - 1 })}>{t('이전 장면', 'Previous scene')}</button>
           {reviewing ? (
-            <button className="primary-button" onClick={returnFromReview}>활동으로 돌아가기</button>
+            <button className="primary-button" onClick={returnFromReview}>{t('활동으로 돌아가기', 'Return to activity')}</button>
           ) : progress.pageIndex < story.scenes.length - 1 ? (
-            <button className="primary-button" onClick={() => persist({ ...progress, pageIndex: progress.pageIndex + 1 })}>다음 장면</button>
+            <button className="primary-button" onClick={() => persist({ ...progress, pageIndex: progress.pageIndex + 1 })}>{t('다음 장면', 'Next scene')}</button>
           ) : (
             <button className="primary-button" onClick={() => {
               const next = { ...progress, screen: 'activity' as const };
               persist(next); setScreen('activity'); setMessage('첫 번째 활동을 시작해요!');
-            }}>활동 시작</button>
+            }}>{t('활동 시작', 'Start activities')}</button>
           )}
         </nav>
-        <p className="story-reading-note">천천히 읽어도 괜찮아요. 앞 장면을 다시 볼 수도 있어요.</p>
+        <p className="story-reading-note">{t('천천히 읽어도 괜찮아요. 앞 장면을 다시 볼 수도 있어요.', 'Take your time. You can return to earlier scenes.')}</p>
       </main>
     );
   }
 
   if (screen === 'activity' && progress) {
     const story = storyById(progress.storyId);
-    const activity = story?.activities[progress.activityIndex];
+    const activity = activityForProgress(progress);
     const state = progress.activities[progress.activityIndex];
     if (!story || !activity || !state) return null;
     const activitySpeech = activity.type === 'choice'
@@ -434,13 +450,13 @@ export default function StoryMode({
       <main className="story-screen story-activity-screen">
         <StoryTopBar title={story.title} onBack={returnToStoryHome} />
         <header className="story-activity-header">
-          <div><small>활동 {progress.activityIndex + 1} / {story.activities.length}</small><strong>{activityLabel(activity)}</strong></div>
+          <div><small>{t('활동', 'Activity')} {progress.activityIndex + 1} / {progress.activities.length}</small><strong>{activityLabel(activity)}</strong></div>
           <span>{storyLevelInfo[story.level].icon}</span>
         </header>
         <section className="story-question-card" aria-labelledby="story-question-title">
-          <p className="eyebrow">이야기를 떠올려요</p>
+          <p className="eyebrow">{t('이야기를 떠올려요', 'Remember the story')}</p>
           <h1 id="story-question-title">{activity.prompt}</h1>
-          {ttsEnabled && speechSupported() && <div className="story-prompt-listen-actions"><button className="story-prompt-listen" disabled={speaking} onClick={() => void readAloud(activitySpeech)}>🔊 문제 읽어 주기</button><button className="story-prompt-listen story-prompt-slow" disabled={speaking} onClick={() => void readAloud(activitySpeech, true)}>🐢 느리게 읽기</button></div>}
+          {ttsEnabled && speechSupported() && <div className="story-prompt-listen-actions"><button className="story-prompt-listen" disabled={speaking} onClick={() => void readAloud(activitySpeech)}>🔊 {t('문제 읽어 주기', 'Read question')}</button><button className="story-prompt-listen story-prompt-slow" disabled={speaking} onClick={() => void readAloud(activitySpeech, true)}>🐢 {t('느리게 읽기', 'Read slowly')}</button></div>}
         </section>
 
         {activity.type === 'choice' && state.status === 'active' && (
@@ -492,15 +508,15 @@ export default function StoryMode({
         )}
 
         {message && <aside className={`story-feedback ${state.status === 'complete' ? 'success' : ''}`} aria-live="polite"><span aria-hidden="true">{state.status === 'complete' ? '🌟' : '💭'}</span><strong>{message}</strong></aside>}
-        {state.mustReview && <button className="story-review-button" onClick={() => startReview(activity)}>📖 이야기 다시 살펴보기</button>}
-        {!state.mustReview && state.status !== 'complete' && !state.usedHint && <button className="story-hint-button" onClick={() => showHint(activity)}>힌트 보기</button>}
-        {state.status === 'complete' && <button className="primary-button story-next-button" onClick={nextActivity}>{progress.activityIndex === story.activities.length - 1
-          ? progress.missionVocabularyIds?.length ? '낱말 떠올리기' : '결과 보기'
-          : '다음 활동'}</button>}
+        {state.mustReview && <button className="story-review-button" onClick={() => startReview(activity)}>📖 {t('이야기 다시 살펴보기', 'Review the story')}</button>}
+        {!state.mustReview && state.status !== 'complete' && !state.usedHint && <button className="story-hint-button" onClick={() => showHint(activity)}>{t('힌트 보기', 'Show hint')}</button>}
+        {state.status === 'complete' && <button className="primary-button story-next-button" onClick={nextActivity}>{progress.activityIndex === progress.activities.length - 1
+          ? progress.missionVocabularyIds?.length ? t('낱말 떠올리기', 'Recall words') : t('결과 보기', 'See results')
+          : t('다음 활동', 'Next activity')}</button>}
         <button className="story-back-to-reading" onClick={() => {
           const next = { ...progress, screen: 'reading' as const, pageIndex: 0 };
           persist(next); setScreen('reading');
-        }}>이야기 처음부터 보기</button>
+        }}>{t('이야기 처음부터 보기', 'Read story from the beginning')}</button>
       </main>
     );
   }
@@ -555,7 +571,7 @@ export default function StoryMode({
       <main className="story-screen story-result-screen">
         {growthAward && <GrowthCelebration award={growthAward} animationsEnabled={animationsEnabled} />}
         <div className={`story-result-cover ${animationsEnabled ? '' : 'still'}`} aria-hidden="true">{story.cover}</div>
-        <p className="eyebrow">{result.daily ? '오늘의 이야기 완료!' : '이야기 탐험 성공!'}</p>
+        <p className="eyebrow">{result.daily ? t('오늘의 이야기 완료!', "Today's story complete!") : t('이야기 탐험 성공!', 'Story adventure complete!')}</p>
         <h1>{story.title}</h1>
         <div className="story-stars" aria-label={`별 ${result.stars}개`}>{[1, 2, 3].map((star) => <span key={star} className={star <= result.stars ? 'earned' : ''}>★</span>)}</div>
         <p className="story-result-message">{result.strengthMessage}</p>
@@ -568,20 +584,20 @@ export default function StoryMode({
             <small>도움 없이 다시 기억한 낱말 {result.missionRecallCorrect ?? 0} / {result.missionVocabularyIds.length}</small>
           </aside>
         ) : null}
-        {result.earnedDailyBadge && <aside className="story-daily-badge"><span>🏅</span><strong>오늘의 이야기 배지</strong><small>새로운 이야기를 끝까지 탐험했어요!</small></aside>}
-        {result.improved && <p className="story-best-note">새로운 최고 기록이에요!</p>}
-        <section className="story-result-stats" aria-label="이야기 결과">
-          <div><small>첫 시도 성공</small><strong>{result.firstTryCount} / 3</strong></div>
-          <div><small>사용한 힌트</small><strong>{result.hintCount}개</strong></div>
-          <div><small>다시 읽기</small><strong>{result.reviewCount}번</strong></div>
-          <div><small>탐험 시간</small><strong>{formatTime(result.elapsedMs)}</strong></div>
+        {result.earnedDailyBadge && <aside className="story-daily-badge"><span>🏅</span><strong>{t('오늘의 이야기 배지', "Today's Story badge")}</strong><small>{t('새로운 이야기를 끝까지 탐험했어요!', 'You explored a new story to the end!')}</small></aside>}
+        {result.improved && <p className="story-best-note">{t('새로운 최고 기록이에요!', 'New best record!')}</p>}
+        <section className="story-result-stats" aria-label={t('이야기 결과', 'Story results')}>
+          <div><small>{t('첫 시도 성공', 'First-try success')}</small><strong>{result.firstTryCount} / 3</strong></div>
+          <div><small>{t('사용한 힌트', 'Hints used')}</small><strong>{result.hintCount}</strong></div>
+          <div><small>{t('다시 읽기', 'Reviews')}</small><strong>{result.reviewCount}</strong></div>
+          <div><small>{t('탐험 시간', 'Adventure time')}</small><strong>{formatTime(result.elapsedMs)}</strong></div>
         </section>
         <div className="story-result-actions">
-          <button className="primary-button" onClick={() => void startStory(story, result.daily, result.missionVocabularyIds ?? [])}>다시 읽기</button>
-          <button className="secondary-button" onClick={() => void startStory(pickStory(story.level, records.recentStoryIds, random))}>다른 이야기</button>
-          <button className="secondary-button" onClick={() => setScreen('library')}>나의 이야기 도감</button>
-          <button className="text-button" onClick={returnToStoryHome}>이야기 탐험대 홈</button>
-          <button className="text-button" onClick={onExit}>학습 놀이터로</button>
+          <button className="primary-button" onClick={() => void startStory(story, result.daily, result.missionVocabularyIds ?? [])}>{t('다시 읽기', 'Read again')}</button>
+          <button className="secondary-button" onClick={() => void startStory(pickStory(story.level, records.recentStoryIds, random))}>{t('다른 이야기', 'Another story')}</button>
+          <button className="secondary-button" onClick={() => setScreen('library')}>{t('나의 이야기 도감', 'My Story Library')}</button>
+          <button className="text-button" onClick={returnToStoryHome}>{t('이야기 탐험대 홈', 'Story Explorers home')}</button>
+          <button className="text-button" onClick={onExit}>{t('학습 놀이터로', 'Learning Playground')}</button>
         </div>
       </main>
     );
@@ -607,20 +623,21 @@ export default function StoryMode({
     );
   }
 
-  const todayKey = storyDailyKey();
-  const vocabularyMission = createStoryVocabularyMission(stories, learnedWordIds);
+  const levelStories = storiesByLevel(selectedLevel);
+  const freshLevelStories = levelStories.filter((story) => !dailySelectionIssue.excludedFingerprints.includes(story.id));
+  const vocabularyMission = createStoryVocabularyMission(freshLevelStories.length ? freshLevelStories : levelStories, learnedWordIds);
   const missionStory = vocabularyMission ? storyById(vocabularyMission.storyId) : undefined;
-  const todayStory = missionStory ?? dailyStory(todayKey, selectedLevel);
+  const todayStory = missionStory ?? pickStory(selectedLevel, dailySelectionIssue.excludedFingerprints, randomForIssue(dailySelectionIssue));
   const todayCompleted = records.dailyBadges.includes(todayKey);
   return (
     <main className="story-screen story-home-screen">
-      <StoryTopBar title="이야기 탐험대" onBack={onExit} />
+      <StoryTopBar title={t('이야기 탐험대', 'Story Explorers')} onBack={onExit} />
       <section className="story-hero">
-        <div><p className="eyebrow">읽고, 기억하고, 생각해요</p><h1>이야기 속으로<br />탐험을 떠나요!</h1><p>한 편에 약 3~5분이면 충분해요.</p></div>
+        <div><p className="eyebrow">{t('읽고, 기억하고, 생각해요', 'Read, remember, and think')}</p><h1>{t('이야기 속으로', 'Set off on an adventure')}<br />{t('탐험을 떠나요!', 'inside a story!')}</h1><p>{t('한 편에 약 3~5분이면 충분해요.', 'Each story takes about 3–5 minutes.')}</p></div>
         <GuideCharacter className="story-guide" decorative />
       </section>
-      <aside className="story-howto" aria-label="이야기 탐험 방법">
-        <span><b>1</b> 읽거나 듣기</span><i aria-hidden="true">›</i><span><b>2</b> 세 가지 활동</span><i aria-hidden="true">›</i><span><b>3</b> 별과 도감</span>
+      <aside className="story-howto" aria-label={t('이야기 탐험 방법', 'How to explore a story')}>
+        <span><b>1</b> {t('읽거나 듣기', 'Read or listen')}</span><i aria-hidden="true">›</i><span><b>2</b> {t('세 가지 활동', 'Three activities')}</span><i aria-hidden="true">›</i><span><b>3</b> {t('별과 도감', 'Stars and library')}</span>
       </aside>
       {savedProgress && storyById(savedProgress.storyId) && (
         <button className="story-resume-card" onClick={resumeStory}>
@@ -629,13 +646,16 @@ export default function StoryMode({
             : savedProgress.screen === 'recall' ? '낱말 다시 떠올리기' : `${savedProgress.activityIndex + 1}번째 활동`}</small></span><b aria-hidden="true">›</b>
         </button>
       )}
-      <button className="story-daily-card" onClick={() => void startStory(todayStory, true, vocabularyMission?.vocabularyIds ?? [])}>
+      <button className="story-daily-card" onClick={() => {
+        recordIssuedFingerprints(dailySelectionIssue, [todayStory.id]);
+        void startStory(todayStory, true, vocabularyMission?.vocabularyIds ?? []);
+      }}>
         <span aria-hidden="true">☀️</span><span><strong>{vocabularyMission ? '오늘의 낱말 미션' : '오늘의 이야기'} · {todayStory.title}</strong><small>{vocabularyMission
           ? `배운 낱말을 찾아요: ${vocabularyMission.vocabularyIds.map((wordId) => storyVocabularyLabelById.get(wordId)).filter(Boolean).join(' · ')}`
           : todayCompleted ? '오늘의 배지를 받았어요! 다시 읽어 볼까요?' : '완료하면 특별 배지를 받아요'}</small></span><b aria-hidden="true">›</b>
       </button>
       <section className="story-level-section">
-        <div className="story-section-title"><div><p className="eyebrow">내게 맞게 골라요</p><h2>어느 단계로 읽을까요?</h2></div><button onClick={() => setScreen('library')}>도감 보기</button></div>
+        <div className="story-section-title"><div><p className="eyebrow">{t('내게 맞게 골라요', 'Choose what fits you')}</p><h2>{t('어느 단계로 읽을까요?', 'Which level will you read?')}</h2></div><button onClick={() => setScreen('library')}>{t('도감 보기', 'Open library')}</button></div>
         <div className="story-level-grid" role="radiogroup" aria-label="이야기 단계">
           {STORY_LEVELS.map((level) => {
             const info = storyLevelInfo[level];
@@ -653,7 +673,7 @@ export default function StoryMode({
           })}
         </div>
       </section>
-      {storageWarning && <p className="story-storage-warning" role="status">기록을 저장하지 못했지만 이야기는 계속 읽을 수 있어요.</p>}
+      {storageWarning && <p className="story-storage-warning" role="status">{t('기록을 저장하지 못했지만 이야기는 계속 읽을 수 있어요.', 'Records could not be saved, but you can keep reading.')}</p>}
     </main>
   );
 }
@@ -665,5 +685,6 @@ function StoryScenePicture({ sceneId, fallback, alt, featured = false }: { scene
 }
 
 function StoryTopBar({ title, onBack }: { title: string; onBack: () => void }) {
-  return <header className="story-top-bar"><button className="icon-button" onClick={onBack} aria-label="뒤로 가기">←</button><strong>{title}</strong><span /></header>;
+  const { t } = useLocale();
+  return <header className="story-top-bar"><button className="icon-button" onClick={onBack} aria-label={t('뒤로 가기', 'Go back')}>←</button><strong>{title}</strong><span /></header>;
 }

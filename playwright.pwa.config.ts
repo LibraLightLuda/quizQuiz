@@ -8,6 +8,7 @@ export default defineConfig({
   use: {
     baseURL: 'http://127.0.0.1:4176/NumberCal/',
     ...devices['Desktop Chrome'],
+    locale: 'ko-KR',
     serviceWorkers: 'allow',
     trace: 'retain-on-failure'
   },

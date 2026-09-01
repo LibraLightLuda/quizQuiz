@@ -210,5 +210,13 @@ export const sudokuDailyKey = (date = new Date()): string => {
   return `${year}-${month}-${day}`;
 };
 
-export const generateDailySudoku = (difficulty: SudokuDifficulty, date = new Date()): SudokuPuzzle =>
-  generateSudoku(difficulty, `daily-${sudokuDailyKey(date)}-${difficulty}`);
+export const sudokuPuzzleFingerprint = (puzzle: SudokuPuzzle): string => {
+  const relabel = new Map<number, number>();
+  let next = 1;
+  const normalizedSolution = puzzle.solution.map((value) => {
+    if (!relabel.has(value)) relabel.set(value, next++);
+    return relabel.get(value);
+  });
+  const blankMask = puzzle.puzzle.map((value) => value === 0 ? '0' : '1').join('');
+  return `${puzzle.difficulty}:${blankMask}:${normalizedSolution.join('')}`;
+};

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   countSolutions,
-  generateDailySudoku,
   generateSudoku,
   isValidSolution,
   SUDOKU_DIFFICULTIES,
-  sudokuDefinitions
+  sudokuDefinitions,
+  sudokuPuzzleFingerprint
 } from './sudokuGenerator';
 
 describe('스도쿠 생성기', () => {
@@ -21,12 +21,13 @@ describe('스도쿠 생성기', () => {
     });
   }
 
-  it('같은 날짜의 오늘 퍼즐은 언제나 같다', () => {
-    const date = new Date(2026, 7, 14);
-    const first = generateDailySudoku('growing', date);
-    const second = generateDailySudoku('growing', date);
-    expect(second.id).toBe(first.id);
-    expect(second.puzzle).toEqual(first.puzzle);
-    expect(second.solution).toEqual(first.solution);
+  it('숫자만 치환된 같은 구조를 동일 지문으로 인식한다', () => {
+    const puzzle = generateSudoku('beginner', 'fingerprint');
+    const swapped = {
+      ...puzzle,
+      puzzle: puzzle.puzzle.map((value) => value === 1 ? 2 : value === 2 ? 1 : value),
+      solution: puzzle.solution.map((value) => value === 1 ? 2 : value === 2 ? 1 : value)
+    };
+    expect(sudokuPuzzleFingerprint(swapped)).toBe(sudokuPuzzleFingerprint(puzzle));
   });
 });

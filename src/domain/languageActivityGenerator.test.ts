@@ -5,7 +5,7 @@ import { lessonPhases } from './lessonPlanner';
 import { skillDefinitionById } from './skillData';
 
 describe('공통 언어 활동 생성기', () => {
-  it('작은 모험에서 그림·소리·조립·문장 활동을 차례로 만난다', () => {
+  it('작은 모험에서 활동 유형이 연속 반복되지 않고 다양하게 섞인다', () => {
     const random = new SeededRandom(2026);
     const recentSignatures: string[] = [];
     const activities: string[] = [];
@@ -22,9 +22,8 @@ describe('공통 언어 활동 생성기', () => {
       activities.push(question.activity!.kind);
       recentSignatures.push(question.signature);
     }
-    expect(activities).toEqual([
-      'picture-link', 'sound-match', 'word-build', 'word-build', 'sentence-complete'
-    ]);
+    expect(new Set(activities).size).toBe(4);
+    expect(activities.every((activity, index) => index === 0 || activity !== activities[index - 1])).toBe(true);
   });
 
   it('두 언어와 모든 단계에서 보기·기술 증거가 유효하다', () => {
@@ -54,13 +53,11 @@ describe('공통 언어 활동 생성기', () => {
   });
 
   it('낱말 조립은 정답 조각과 방해 타일, 단계 힌트를 함께 만든다', () => {
-    const question = generateLanguageActivityQuestion({
-      mode: 'ko-adventure',
-      difficulty: 'easy',
-      recentSignatures: [],
-      lessonPhase: 'review',
-      random: new SeededRandom(17)
-    });
+    const random = new SeededRandom(17);
+    const question = Array.from({ length: 100 }, () => generateLanguageActivityQuestion({
+      mode: 'ko-adventure', difficulty: 'easy', recentSignatures: [], lessonPhase: 'review',
+      random
+    })).find((candidate) => candidate.activity?.kind === 'word-build')!;
     const activity = question.activity!;
     const targetChunks = Array.from(question.explanation);
     expect(activity.kind).toBe('word-build');
@@ -75,13 +72,10 @@ describe('공통 언어 활동 생성기', () => {
   });
 
   it('소리 찾기는 정답을 화면 문구에 노출하지 않고 음성 대체 정보를 제공한다', () => {
-    const question = generateLanguageActivityQuestion({
-      mode: 'en-adventure',
-      difficulty: 'easy',
-      recentSignatures: [],
-      lessonPhase: 'discover',
-      random: new SeededRandom(7)
-    });
+    const question = Array.from({ length: 100 }, (_, index) => generateLanguageActivityQuestion({
+      mode: 'en-adventure', difficulty: 'easy', recentSignatures: [], lessonPhase: 'discover',
+      random: new SeededRandom(index + 1)
+    })).find((candidate) => candidate.activity?.kind === 'sound-match')!;
     expect(question.activity?.kind).toBe('sound-match');
     expect(question.kind).toBe('listening');
     expect(question.speech?.text).toBe(question.explanation);
@@ -90,13 +84,11 @@ describe('공통 언어 활동 생성기', () => {
   });
 
   it('도전 단계도 키보드 전용이 아닌 터치 보기로 생성한다', () => {
-    const question = generateLanguageActivityQuestion({
-      mode: 'ko-adventure',
-      difficulty: 'challenge',
-      recentSignatures: [],
-      lessonPhase: 'story',
-      random: new SeededRandom(9)
-    });
+    const random = new SeededRandom(9);
+    const question = Array.from({ length: 100 }, () => generateLanguageActivityQuestion({
+      mode: 'ko-adventure', difficulty: 'challenge', recentSignatures: [], lessonPhase: 'story',
+      random
+    })).find((candidate) => candidate.activity?.kind === 'sentence-complete')!;
     expect(question.activity?.kind).toBe('sentence-complete');
     expect(question.options).toHaveLength(4);
     expect(question.speech).toMatchObject({ lang: 'ko-KR', slowReplay: true });

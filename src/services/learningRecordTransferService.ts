@@ -1,4 +1,5 @@
 import { LEARNING_RECORD_KEYS, type LearningRecordKey } from './storageService';
+import { resetVarietyMemory } from './contentVarietyService';
 
 const TRANSFER_SCHEMA_VERSION = 1 as const;
 const MAX_TRANSFER_BYTES = 2_000_000;
@@ -34,7 +35,8 @@ const expectedRecordSchema: Record<LearningRecordKey, number | readonly number[]
   'numbercal.balance.records.v1': 1,
   'numbercal.number-path.records.v1': [1, 2],
   'numbercal.block-garden.records.v1': 1,
-  'numbercal.growth.v1': 1
+  'numbercal.growth.v1': 1,
+  'numbercal.content-variety.v1': 1
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -53,7 +55,9 @@ const isTransfer = (value: unknown): value is LearningRecordTransfer => {
     || typeof value.exportedAt !== 'string' || Number.isNaN(Date.parse(value.exportedAt)) || !isRecord(value.records)) return false;
   const records = value.records as Record<string, unknown>;
   if (Object.keys(records).some((key) => !LEARNING_RECORD_KEYS.includes(key as LearningRecordKey))) return false;
-  const legacyOptional = new Set<LearningRecordKey>(['numbercal.block-garden.records.v1', 'numbercal.growth.v1']);
+  const legacyOptional = new Set<LearningRecordKey>([
+    'numbercal.block-garden.records.v1', 'numbercal.growth.v1', 'numbercal.content-variety.v1'
+  ]);
   if (LEARNING_RECORD_KEYS.some((key) => !legacyOptional.has(key) && !(key in records))) return false;
   legacyOptional.forEach((key) => { if (!(key in records)) records[key] = null; });
   return LEARNING_RECORD_KEYS.every((key) => {
@@ -115,6 +119,7 @@ export const restoreLearningRecordTransfer = (transfer: LearningRecordTransfer):
       if (value === null) localStorage.removeItem(key);
       else localStorage.setItem(key, JSON.stringify(value));
     });
+    resetVarietyMemory();
     return true;
   } catch {
     try {

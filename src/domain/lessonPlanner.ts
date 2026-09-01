@@ -13,10 +13,3 @@ export const lessonPhases = (length: SessionLength): readonly LessonPhase[] =>
 
 export const lessonPhaseAt = (length: SessionLength, questionIndex: number): LessonPhase =>
   lessonPhases(length)[Math.max(0, Math.min(length - 1, questionIndex))];
-
-export const lessonPhaseLabel: Record<LessonPhase, string> = {
-  welcome: '반가운 시작',
-  discover: '오늘의 발견',
-  review: '다시 만난 친구',
-  story: '이야기 마무리'
-};

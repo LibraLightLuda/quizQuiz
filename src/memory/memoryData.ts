@@ -1,6 +1,7 @@
 import type { MemoryCategory, MemoryDifficulty, MemoryMode, MemoryPair } from './types';
 import { koreanWords } from '../data/koreanWords';
 import { englishWords } from '../data/englishWords';
+import type { Difficulty } from '../domain/types';
 
 export const MEMORY_MODES: MemoryMode[] = ['mixed', 'math', 'korean', 'english'];
 export const MEMORY_DIFFICULTIES: MemoryDifficulty[] = ['starter', 'growing', 'focus', 'master'];
@@ -52,4 +53,30 @@ export const pairPools: Record<Exclude<MemoryMode, 'mixed'>, readonly MemoryPair
   math: mathPairs,
   korean: koreanPairs,
   english: englishPairs
+};
+
+export const memoryDomainDifficulty: Record<MemoryDifficulty, Difficulty> = {
+  starter: 'easy', growing: 'normal', focus: 'hard', master: 'challenge'
+};
+
+export const languageMemoryPairs = (
+  mode: 'korean' | 'english', difficulty: MemoryDifficulty
+): MemoryPair[] => {
+  const level = memoryDomainDifficulty[difficulty];
+  if (mode === 'korean') return koreanWords.filter((word) => word.difficulty === level).map((word) => ({
+    id: `memory-${word.id}`,
+    left: word.word,
+    right: word.hintKo,
+    category: 'korean',
+    wordId: word.id,
+    skillIds: [...word.skillIds]
+  }));
+  return englishWords.filter((word) => word.difficulty === level).map((word) => ({
+    id: `memory-${word.id}`,
+    left: word.word,
+    right: word.meaningKo,
+    category: 'english',
+    wordId: word.id,
+    skillIds: [...word.skillIds]
+  }));
 };

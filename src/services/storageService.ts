@@ -1,5 +1,6 @@
 import { DEFAULT_CONFIG } from '../domain/difficulty';
 import type { Settings, StoredHistory, SessionSummary, SessionConfig, Mode, Subject, SessionLength, LearningTheme, SpeechRate } from '../domain/types';
+import { resetVarietyMemory } from './contentVarietyService';
 
 const SETTINGS_KEY = 'numbercal.settings.v1';
 export const LEARNING_RECORD_KEYS = [
@@ -12,7 +13,8 @@ export const LEARNING_RECORD_KEYS = [
   'numbercal.balance.records.v1',
   'numbercal.number-path.records.v1',
   'numbercal.block-garden.records.v1',
-  'numbercal.growth.v1'
+  'numbercal.growth.v1',
+  'numbercal.content-variety.v1'
 ] as const;
 export type LearningRecordKey = typeof LEARNING_RECORD_KEYS[number];
 const HISTORY_KEY: LearningRecordKey = LEARNING_RECORD_KEYS[0];
@@ -140,6 +142,7 @@ export const clearAllLearningRecords = (): boolean => {
   try {
     localStorage.removeItem(HISTORY_KEY);
     for (const key of GAME_RECORD_KEYS) localStorage.removeItem(key);
+    resetVarietyMemory();
     return true;
   } catch {
     return false;

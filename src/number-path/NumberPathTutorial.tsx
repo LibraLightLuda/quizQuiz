@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import NumberPathBoard from './NumberPathBoard';
 import type { NumberPathPuzzle } from './types';
+import { useLocale } from '../i18n/LocaleContext';
 
 const firstPuzzle: NumberPathPuzzle = {
   id: 'tutorial-first',
@@ -62,6 +63,7 @@ const heartPuzzle: NumberPathPuzzle = {
 };
 
 export default function NumberPathTutorial({ onBack, onComplete }: { onBack: () => void; onComplete: () => void }) {
+  const { t } = useLocale();
   const [stage, setStage] = useState(0);
   const [path, setPath] = useState<string[]>([]);
   const [currentNodeId, setCurrentNodeId] = useState(firstPuzzle.startNodeId);
@@ -106,26 +108,26 @@ export default function NumberPathTutorial({ onBack, onComplete }: { onBack: () 
     }
   };
 
-  const title = stage === 0 ? '숫자 다리를 건너요'
-    : stage === 1 ? '목표 합을 미리 생각해요'
-      : stage === 2 && !rescue ? '위험한 다리도 배워 봐요'
-        : stage === 2 ? '하트를 채우고 다시 도전해요' : '보물섬으로 가는 법을 배웠어요!';
-  const message = stage === 0 ? '+2 다리를 눌러 첫 섬으로 건너가 보세요.'
-    : stage === 1 && path.length === 0 ? '목표는 5예요. 먼저 +2 다리를 골라 보세요.'
-      : stage === 1 ? '현재 합은 2예요. +3 다리를 건너 목표 5를 만드세요.'
-        : stage === 2 && !rescue && !rescued ? '일부러 +5 위험한 다리를 눌러 보세요.'
-          : stage === 2 && rescue ? '길을 완성할 수 없으면 하트가 줄어요. 다시 도전해 볼까요?'
-            : stage === 2 ? '반짝이는 +3 다리가 안전한 길이에요.'
-              : '+3으로 목표를 만들었어요. 실제 게임에서는 하트가 문제마다 3개예요.';
+  const title = stage === 0 ? t('숫자 다리를 건너요', 'Cross a number bridge')
+    : stage === 1 ? t('목표 합을 미리 생각해요', 'Plan for the target sum')
+      : stage === 2 && !rescue ? t('위험한 다리도 배워 봐요', 'Learn about unsafe bridges')
+        : stage === 2 ? t('하트를 채우고 다시 도전해요', 'Refill hearts and retry') : t('보물섬으로 가는 법을 배웠어요!', 'You learned how to reach Treasure Island!');
+  const message = stage === 0 ? t('+2 다리를 눌러 첫 섬으로 건너가 보세요.', 'Tap the +2 bridge to cross to the first island.')
+    : stage === 1 && path.length === 0 ? t('목표는 5예요. 먼저 +2 다리를 골라 보세요.', 'The target is 5. Choose the +2 bridge first.')
+      : stage === 1 ? t('현재 합은 2예요. +3 다리를 건너 목표 5를 만드세요.', 'The current sum is 2. Cross +3 to make 5.')
+        : stage === 2 && !rescue && !rescued ? t('일부러 +5 위험한 다리를 눌러 보세요.', 'Try the unsafe +5 bridge on purpose.')
+          : stage === 2 && rescue ? t('길을 완성할 수 없으면 하트가 줄어요. 다시 도전해 볼까요?', 'A heart is used when the path cannot finish. Try again?')
+            : stage === 2 ? t('반짝이는 +3 다리가 안전한 길이에요.', 'The sparkling +3 bridge is safe.')
+              : t('+3으로 목표를 만들었어요. 실제 게임에서는 하트가 문제마다 3개예요.', 'You reached the target with +3. Each real puzzle gives you 3 hearts.');
 
   return (
     <main className="screen number-path-tutorial-screen">
-      <header className="top-bar"><button className="icon-button" onClick={onBack} aria-label="뒤로 가기">←</button><strong>다리 건너기 연습</strong><span /></header>
+      <header className="top-bar"><button className="icon-button" onClick={onBack} aria-label={t('뒤로 가기', 'Go back')}>←</button><strong>{t('다리 건너기 연습', 'Bridge crossing practice')}</strong><span /></header>
       <div className="number-path-tutorial-progress" aria-label={`연습 ${Math.min(stage + 1, 3)} / 3`}>
         {[0, 1, 2].map((item) => <span key={item} className={stage >= item ? 'active' : ''}>{stage > item ? '✓' : item + 1}</span>)}
       </div>
       <section className="number-path-tutorial-copy">
-        <p className="eyebrow">목표 {puzzle.targetSum} · 다리 {puzzle.requiredCrossings}개</p>
+        <p className="eyebrow">{t(`목표 ${puzzle.targetSum} · 다리 ${puzzle.requiredCrossings}개`, `Target ${puzzle.targetSum} · ${puzzle.requiredCrossings} bridges`)}</p>
         <h1>{title}</h1>
         {stage === 2 && <div className="number-path-hearts" aria-label={rescue ? '하트 0개' : '하트 1개'}>{rescue ? '♡' : '♥'}</div>}
       </section>
@@ -138,7 +140,7 @@ export default function NumberPathTutorial({ onBack, onComplete }: { onBack: () 
           revealedBridgeId={rescued ? 'c-good' : undefined}
           onSelect={select}
           disabled={complete || rescue}
-          label="숫자 다리 연습 지도"
+          label={t('숫자 다리 연습 지도', 'Number bridge practice map')}
         />
       </div>
       <p className={`number-path-message ${complete ? 'is-success' : ''}`} aria-live="polite">{message}</p>
@@ -147,9 +149,9 @@ export default function NumberPathTutorial({ onBack, onComplete }: { onBack: () 
           setRescue(false);
           setRescued(true);
           setFailed(new Set());
-        }}>♥ 하트 채우고 다시 도전</button>
+        }}>♥ {t('하트 채우고 다시 도전', 'Refill hearts and retry')}</button>
       )}
-      {complete && <button className="primary-button number-path-start" onClick={onComplete}>첫걸음 시작하기</button>}
+      {complete && <button className="primary-button number-path-start" onClick={onComplete}>{t('첫걸음 시작하기', 'Start the first level')}</button>}
     </main>
   );
 }

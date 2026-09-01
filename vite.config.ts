@@ -14,16 +14,16 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'prompt',
         manifest: {
-          name: '어린이 학습 놀이터',
-          short_name: '학습 놀이터',
-          description: '수학, 한국어, 영어, 이야기 탐험대, 기억력 챌린지, 균형 저울, 숫자 길 찾기, 빈칸 정원과 스도쿠를 즐겁게 배우는 어린이 학습 앱',
+          name: 'NumberCal Learning Playground',
+          short_name: 'NumberCal',
+          description: 'A daily learning app for children with math, Korean, English, stories, memory, logic, number paths, block puzzles, and Sudoku.',
           theme_color: '#5b4ae8',
           background_color: '#f7f7ff',
           display: 'standalone',
           orientation: 'any',
           scope: base,
           start_url: base,
-          lang: 'ko-KR',
+          lang: 'en',
           icons: [
             { src: `${base}icons/icon-192.png`, sizes: '192x192', type: 'image/png' },
             { src: `${base}icons/icon-512.png`, sizes: '512x512', type: 'image/png' },

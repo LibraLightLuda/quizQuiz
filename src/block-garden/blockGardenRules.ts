@@ -172,7 +172,8 @@ export const createGardenTray = (board: readonly GardenCell[], random: RandomSou
 export const createGardenRefillTray = (
   board: readonly GardenCell[],
   random: RandomSource,
-  upcoming: GardenPiece
+  upcoming: GardenPiece,
+  previousShapeIds: readonly string[] = []
 ): GardenPiece[] => {
   const selected: GardenShape[] = [];
   const excludedShapeIds = new Set([upcoming.shapeId]);
@@ -180,6 +181,8 @@ export const createGardenRefillTray = (
 
   for (let slot = 0; slot < 2; slot += 1) {
     let candidates = GARDEN_SHAPES.filter((candidate) => !excludedShapeIds.has(candidate.id));
+    const unseen = candidates.filter((candidate) => !previousShapeIds.includes(candidate.id));
+    if (unseen.length) candidates = unseen;
     if (slot === 0 && !upcomingFits) {
       const fitting = candidates.filter((candidate) => validPlacements(board, candidate).length > 0);
       if (fitting.length) candidates = fitting;
@@ -202,11 +205,13 @@ export const createGardenGame = (
 ): GardenGame => {
   const board = emptyGardenBoard();
   const mode = options.mode ?? 'classic';
+  const tray = createGardenTray(board, random);
   return {
     schemaVersion: 1,
     board,
-    tray: createGardenTray(board, random),
+    tray,
     nextPiece: createGardenPreview(board, random),
+    recentShapeIds: tray.map((piece) => piece.shapeId),
     mode,
     dailyDate: options.dailyDate,
     dailyTargetLines: options.dailyTargetLines,
@@ -353,16 +358,21 @@ export const placeGardenPiece = (
   );
   let tray = game.tray.map((item, index) => index === trayIndex ? null : item);
   let nextPiece = game.nextPiece;
+  let refilled = false;
   if (tray.every((item) => item === null)) {
     const upcoming = nextPiece ?? createGardenPreview(board, random);
-    tray = createGardenRefillTray(board, random, upcoming);
+    tray = createGardenRefillTray(board, random, upcoming, game.recentShapeIds);
     nextPiece = createGardenPreview(board, random);
+    refilled = true;
   }
   const nextGame: GardenGame = {
     ...game,
     board,
     tray,
     nextPiece,
+    recentShapeIds: refilled
+      ? tray.filter((piece): piece is GardenPiece => piece !== null).map((piece) => piece.shapeId)
+      : game.recentShapeIds,
     itemBoard,
     inventory: game.mode === 'items' ? inventory : undefined,
     lastCollectedItems: collectedItems,

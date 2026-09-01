@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { playSuccessSound, unlockAudio } from '../services/soundService';
 import {
-  generateDailySudoku,
   generateSudoku,
   SUDOKU_DIFFICULTIES,
   sudokuDailyKey,
-  sudokuDefinitions
+  sudokuDefinitions,
+  sudokuPuzzleFingerprint
 } from './sudokuGenerator';
 import {
   clearSudokuProgress,
@@ -23,6 +23,8 @@ import { SudokuCompleteVisual, SudokuToolIcon } from './SudokuVisuals';
 import { useGrowth } from '../growth/GrowthContext';
 import { GrowthCelebration, GrowthRewardCard } from '../growth/GrowthUI';
 import type { GrowthAward } from '../growth/types';
+import { useLocale } from '../i18n/LocaleContext';
+import { createGenerationIssue, recordIssuedFingerprints } from '../services/contentVarietyService';
 import './sudoku.css';
 
 type SudokuScreen = 'levels' | 'tutorial' | 'play' | 'result';
@@ -55,6 +57,7 @@ const progressPercent = (progress: SudokuProgress): number => {
 };
 
 function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps) {
+  const { t } = useLocale();
   const growth = useGrowth();
   const initialProgress = useMemo(() => loadSudokuProgress(), []);
   const [screen, setScreen] = useState<SudokuScreen>('levels');
@@ -69,7 +72,7 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
   const [daily, setDaily] = useState(false);
   const [result, setResult] = useState<SudokuResult | null>(null);
   const [growthAward, setGrowthAward] = useState<GrowthAward | null>(null);
-  const [message, setMessage] = useState('빈칸을 누르고 알맞은 숫자를 골라 보세요.');
+  const [message, setMessage] = useState(() => t('빈칸을 누르고 알맞은 숫자를 골라 보세요.', 'Tap an empty cell and choose the right number.'));
   const [generating, setGenerating] = useState<SudokuDifficulty | null>(null);
   const [storageWarning, setStorageWarning] = useState(false);
   const [inputLocked, setInputLocked] = useState(false);
@@ -81,6 +84,7 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
   const inputUnlockTimer = useRef<number | null>(null);
   const inputLock = useRef(false);
   const recommended = recommendedSudokuDifficulty(records);
+  const dailyDifficulty = records.lastDifficulty;
 
   const currentElapsed = (): number =>
     screen === 'play' ? timerBase.current + Math.max(0, Date.now() - timerStartedAt.current) : elapsedMs;
@@ -148,7 +152,7 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
     setInputLocked(false);
     setWrongAttempts({});
     setTriedNumbers({});
-    setMessage(next.daily ? '오늘의 퍼즐이에요. 차근차근 시작해 볼까요?' : '빈칸을 누르고 알맞은 숫자를 골라 보세요.');
+    setMessage(next.daily ? t('오늘의 퍼즐이에요. 차근차근 시작해 볼까요?', "This is today's puzzle. Let's begin step by step.") : t('빈칸을 누르고 알맞은 숫자를 골라 보세요.', 'Tap an empty cell and choose the right number.'));
     setResult(null);
     setScreen('play');
   };
@@ -158,12 +162,18 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
   };
 
   const startPuzzle = (difficulty: SudokuDifficulty, isDaily = false, skipConfirm = false) => {
-    if (!skipConfirm && savedProgress && !window.confirm('새 퍼즐을 시작하면 지금 풀던 퍼즐은 바뀌어요. 시작할까요?')) return;
+    if (!skipConfirm && savedProgress && !window.confirm(t('새 퍼즐을 시작하면 지금 풀던 퍼즐은 바뀌어요. 시작할까요?', 'Starting a new puzzle will replace your saved puzzle. Start anyway?'))) return;
     void unlockAudio();
     setGenerating(difficulty);
     window.setTimeout(() => {
       try {
-        const nextPuzzle = isDaily ? generateDailySudoku(difficulty) : generateSudoku(difficulty);
+        const dateKey = isDaily ? sudokuDailyKey() : undefined;
+        const issue = createGenerationIssue({ sectionId: 'sudoku', variant: difficulty, daily: isDaily, dateKey });
+        let nextPuzzle = generateSudoku(difficulty, issue.seed);
+        for (let retry = 1; retry <= 8 && issue.excludedFingerprints.includes(sudokuPuzzleFingerprint(nextPuzzle)); retry += 1) {
+          nextPuzzle = generateSudoku(difficulty, `${issue.seed}:${retry}`);
+        }
+        recordIssuedFingerprints(issue, [sudokuPuzzleFingerprint(nextPuzzle)]);
         const next = makeProgress(
           nextPuzzle,
           [...nextPuzzle.puzzle],
@@ -177,7 +187,7 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
         setSavedProgress(next);
         enterPuzzle(next);
       } catch {
-        setMessage('퍼즐을 준비하지 못했어요. 한 번 더 눌러 주세요.');
+        setMessage(t('퍼즐을 준비하지 못했어요. 한 번 더 눌러 주세요.', 'The puzzle could not be prepared. Please try again.'));
       } finally {
         setGenerating(null);
       }
@@ -235,7 +245,7 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
     }));
     setMistakeCell(cellIndex);
     setMessage(attemptCount >= 2
-      ? '두 번 확인했어요. 이제 찍기는 잠시 쉬고, 가로·세로·상자를 살피거나 힌트를 사용해요.'
+      ? t('두 번 확인했어요. 이제 찍기는 잠시 쉬고, 가로·세로·상자를 살피거나 힌트를 사용해요.', 'You checked twice. Pause guessing and inspect the row, column, and box, or use a hint.')
       : explanation);
     brieflyLockInput(700);
     if (mistakeTimer.current !== null) window.clearTimeout(mistakeTimer.current);
@@ -245,15 +255,15 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
   const inputNumber = (number: number) => {
     if (inputLock.current) return;
     if (!puzzle || selectedCell === null || puzzle.puzzle[selectedCell] !== 0 || hinted[selectedCell]) {
-      setMessage('먼저 빈칸 하나를 눌러 주세요.');
+      setMessage(t('먼저 빈칸 하나를 눌러 주세요.', 'Tap an empty cell first.'));
       return;
     }
     if ((wrongAttempts[selectedCell] ?? 0) >= 2) {
-      setMessage('이 칸은 잠시 멈추고 규칙을 살펴봐요. 다른 빈칸을 고르거나 힌트를 사용할 수 있어요.');
+      setMessage(t('이 칸은 잠시 멈추고 규칙을 살펴봐요. 다른 빈칸을 고르거나 힌트를 사용할 수 있어요.', 'Pause this cell and check the rules. Choose another cell or use a hint.'));
       return;
     }
     if ((triedNumbers[selectedCell] ?? []).includes(number)) {
-      setMessage(`${number}은(는) 이 칸에서 이미 확인했어요. 다른 가능성을 살펴봐요.`);
+      setMessage(t(`${number}은(는) 이 칸에서 이미 확인했어요. 다른 가능성을 살펴봐요.`, `You already checked ${number} in this cell. Try another possibility.`));
       brieflyLockInput(350);
       return;
     }
@@ -277,18 +287,18 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
       return;
     }
     setSelectedCell(chooseNextEmpty(selectedCell, next));
-    setMessage('좋아요! 빈칸이 하나 줄었어요.');
+    setMessage(t('좋아요! 빈칸이 하나 줄었어요.', 'Great! One fewer empty cell.'));
   };
 
   const eraseSelected = () => {
     if (!puzzle || selectedCell === null || puzzle.puzzle[selectedCell] !== 0 || hinted[selectedCell]) {
-      setMessage('직접 넣은 숫자만 지울 수 있어요.');
+      setMessage(t('직접 넣은 숫자만 지울 수 있어요.', 'You can erase only numbers you entered.'));
       return;
     }
     const next = [...grid];
     next[selectedCell] = 0;
     setGrid(next);
-    setMessage('괜찮아요. 다시 생각해 봐요!');
+    setMessage(t('괜찮아요. 다시 생각해 봐요!', 'That is okay. Think again!'));
   };
 
   const useHint = () => {
@@ -304,7 +314,7 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
     setGrid(nextGrid);
     setHinted(nextHinted);
     setSelectedCell(chooseNextEmpty(index, nextGrid));
-    setMessage(`도움 숫자 ${puzzle.solution[index]}을(를) 채웠어요. 이제 이어서 해봐요!`);
+    setMessage(t(`도움 숫자 ${puzzle.solution[index]}을(를) 채웠어요. 이제 이어서 해봐요!`, `Hint number ${puzzle.solution[index]} was filled. Keep going!`));
     if (nextGrid.every((cell, cellIndex) => cell === puzzle.solution[cellIndex])) finishPuzzle(nextGrid, nextHinted);
   };
 
@@ -318,7 +328,7 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
   };
 
   const replacePuzzle = () => {
-    if (!puzzle || !window.confirm('지금 퍼즐 대신 새 퍼즐을 시작할까요?')) return;
+    if (!puzzle || !window.confirm(t('지금 퍼즐 대신 새 퍼즐을 시작할까요?', 'Replace this puzzle with a new one?'))) return;
     setSavedProgress(null);
     startPuzzle(puzzle.difficulty, false, true);
   };
@@ -343,10 +353,10 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
   if (screen === 'levels') {
     return (
       <main className="screen sudoku-level-screen">
-        <SudokuTopBar title="스도쿠" onBack={onExit} />
+        <SudokuTopBar title={t('스도쿠', 'Sudoku')} onBack={onExit} />
         <section className="sudoku-welcome">
           <div className="sudoku-hero-icon" aria-hidden="true"><i>1</i><i>4</i><i>3</i><i>2</i></div>
-          <div><p className="eyebrow">생각이 쑥쑥 자라는 숫자 놀이</p><h1>어느 퍼즐로 시작할까요?</h1></div>
+          <div><p className="eyebrow">{t('생각이 쑥쑥 자라는 숫자 놀이', 'A number game that grows your thinking')}</p><h1>{t('어느 퍼즐로 시작할까요?', 'Which puzzle will you start?')}</h1></div>
         </section>
 
         {savedProgress && (
@@ -357,18 +367,18 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
           </button>
         )}
 
-        <section className="sudoku-rule-card" aria-label="스도쿠 규칙">
+        <section className="sudoku-rule-card" aria-label={t('스도쿠 규칙', 'Sudoku rules')}>
           <span aria-hidden="true">💡</span>
-          <div><strong>같은 숫자는 한 번씩!</strong><small>가로줄, 세로줄, 굵은 선 안에 숫자를 겹치지 않게 채워요.</small></div>
+          <div><strong>{t('같은 숫자는 한 번씩!', 'Use each number once!')}</strong><small>{t('가로줄, 세로줄, 굵은 선 안에 숫자를 겹치지 않게 채워요.', 'Do not repeat a number in any row, column, or bold box.')}</small></div>
         </section>
 
         <button className="sudoku-tutorial-card" onClick={() => setScreen('tutorial')}>
           <span aria-hidden="true">🎓</span>
-          <span><strong>처음이라면 규칙 연습</strong><small>가로·세로·작은 상자를 직접 풀며 배워요</small></span>
-          <b>2분</b>
+          <span><strong>{t('처음이라면 규칙 연습', 'New? Practice the rules')}</strong><small>{t('가로·세로·작은 상자를 직접 풀며 배워요', 'Learn by solving rows, columns, and boxes')}</small></span>
+          <b>{t('2분', '2 min')}</b>
         </button>
 
-        <div className="sudoku-level-grid" aria-label="스도쿠 난이도">
+        <div className="sudoku-level-grid" aria-label={t('스도쿠 난이도', 'Sudoku difficulty')}>
           {SUDOKU_DIFFICULTIES.map((difficulty) => {
             const definition = sudokuDefinitions[difficulty];
             const record = records.byDifficulty[difficulty];
@@ -384,11 +394,11 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
           })}
         </div>
 
-        <button className="daily-sudoku-card" disabled={generating !== null} onClick={() => startPuzzle(recommended, true)}>
-          <span aria-hidden="true">☀️</span><span><strong>오늘의 스도쿠</strong><small>{sudokuDailyKey().replaceAll('-', '.')} · 나에게 맞는 {sudokuDefinitions[recommended].label} 단계</small></span><b aria-hidden="true">›</b>
+        <button className="daily-sudoku-card" disabled={generating !== null} onClick={() => startPuzzle(dailyDifficulty, true)}>
+          <span aria-hidden="true">☀️</span><span><strong>{t('오늘의 스도쿠', "Today's Sudoku")}</strong><small>{sudokuDailyKey().replaceAll('-', '.')} · {t(`선택한 ${sudokuDefinitions[dailyDifficulty].label} 단계`, `Your ${sudokuDefinitions[dailyDifficulty].shortLabel} level`)}</small></span><b aria-hidden="true">›</b>
         </button>
-        {storageWarning && <p className="settings-note warning" role="alert">이 기기에는 진행 상황을 저장하지 못할 수 있어요.</p>}
-        {generating && <p className="sudoku-loading" role="status">새 퍼즐을 만들고 있어요…</p>}
+        {storageWarning && <p className="settings-note warning" role="alert">{t('이 기기에는 진행 상황을 저장하지 못할 수 있어요.', 'This device may not be able to save progress.')}</p>}
+        {generating && <p className="sudoku-loading" role="status">{t('새 퍼즐을 만들고 있어요…', 'Creating a new puzzle…')}</p>}
       </main>
     );
   }
@@ -404,19 +414,19 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
         {growthAward && <GrowthCelebration award={growthAward} animationsEnabled={animationsEnabled} />}
         {animationsEnabled && <SudokuConfetti />}
         <SudokuCompleteVisual />
-        <p className="eyebrow">{result.daily ? '오늘의 스도쿠 성공!' : '퍼즐 완성!'}</p>
-        <h1>{result.isBest ? '최고 기록이에요!' : '끝까지 해냈어요!'}</h1>
-        <p className="sudoku-result-copy">집중해서 모든 칸을 채웠어요. 정말 멋져요!</p>
+        <p className="eyebrow">{result.daily ? t('오늘의 스도쿠 성공!', "Today's Sudoku complete!") : t('퍼즐 완성!', 'Puzzle complete!')}</p>
+        <h1>{result.isBest ? t('최고 기록이에요!', 'New best time!') : t('끝까지 해냈어요!', 'You finished it!')}</h1>
+        <p className="sudoku-result-copy">{t('집중해서 모든 칸을 채웠어요. 정말 멋져요!', 'You focused and filled every cell. Great work!')}</p>
         {growthAward && <GrowthRewardCard award={growthAward} />}
-        <section className="sudoku-result-stats" aria-label="스도쿠 결과">
-          <div><span aria-hidden="true">⏱</span><small>완료 시간</small><strong>{formatSudokuTime(result.elapsedMs)}</strong></div>
-          <div><span aria-hidden="true">🏁</span><small>난이도</small><strong>{definition.label}</strong></div>
-          <div><span aria-hidden="true">💡</span><small>사용한 힌트</small><strong>{result.hints}개</strong></div>
+        <section className="sudoku-result-stats" aria-label={t('스도쿠 결과', 'Sudoku results')}>
+          <div><span aria-hidden="true">⏱</span><small>{t('완료 시간', 'Time')}</small><strong>{formatSudokuTime(result.elapsedMs)}</strong></div>
+          <div><span aria-hidden="true">🏁</span><small>{t('난이도', 'Difficulty')}</small><strong>{definition.label}</strong></div>
+          <div><span aria-hidden="true">💡</span><small>{t('사용한 힌트', 'Hints used')}</small><strong>{result.hints}</strong></div>
         </section>
         <div className="sudoku-result-actions">
-          <button className="primary-button" onClick={() => startPuzzle(result.difficulty)}>새 퍼즐 풀기</button>
-          <button className="secondary-button" onClick={() => setScreen('levels')}>난이도 고르기</button>
-          <button className="text-button" onClick={onExit}>학습 놀이터로</button>
+          <button className="primary-button" onClick={() => startPuzzle(result.difficulty)}>{t('새 퍼즐 풀기', 'Solve a new puzzle')}</button>
+          <button className="secondary-button" onClick={() => setScreen('levels')}>{t('난이도 고르기', 'Choose difficulty')}</button>
+          <button className="text-button" onClick={onExit}>{t('학습 놀이터로', 'Learning Playground')}</button>
         </div>
         {storageWarning && <p className="settings-note warning" role="alert">기록을 이 기기에 저장하지 못했어요.</p>}
       </main>
@@ -439,8 +449,8 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
   return (
     <main className={`screen sudoku-play-screen sudoku-play-size-${puzzle.size}`}>
       <header className="sudoku-play-header">
-        <button className="icon-button" onClick={returnToLevels} aria-label="스도쿠 난이도로 돌아가기">←</button>
-        <div><strong>{definition.label} <small>{definition.shortLabel}</small></strong><span>{daily ? '☀️ 오늘의 퍼즐' : `${filledCount} / ${blankCount}칸`}</span></div>
+        <button className="icon-button" onClick={returnToLevels} aria-label={t('스도쿠 난이도로 돌아가기', 'Return to Sudoku levels')}>←</button>
+        <div><strong>{definition.label} <small>{definition.shortLabel}</small></strong><span>{daily ? t('☀️ 오늘의 퍼즐', "☀️ Today's puzzle") : t(`${filledCount} / ${blankCount}칸`, `${filledCount} / ${blankCount} cells`)}</span></div>
         <time aria-label={`푼 시간 ${formatSudokuTime(elapsedMs)}`}>{formatSudokuTime(elapsedMs)}</time>
       </header>
 
@@ -477,7 +487,7 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
 
       <p className={`sudoku-coach ${mistakeCell !== null ? 'is-gentle' : ''}`} aria-live="polite"><span aria-hidden="true">{mistakeCell !== null ? '♥' : '✦'}</span>{message}</p>
 
-      <div className="sudoku-keypad" aria-label="숫자 선택" style={{ gridTemplateColumns: `repeat(${puzzle.size === 9 ? 5 : puzzle.size}, 1fr)` }}>
+      <div className="sudoku-keypad" aria-label={t('숫자 선택', 'Choose a number')} style={{ gridTemplateColumns: `repeat(${puzzle.size === 9 ? 5 : puzzle.size}, 1fr)` }}>
         {Array.from({ length: puzzle.size }, (_, index) => index + 1).map((number) => {
           const used = grid.filter((cell) => cell === number).length;
           const conflicts = selectedCell === null ? [] : sudokuConflicts(grid, selectedCell, number, puzzle.size, puzzle.boxRows, puzzle.boxCols);
@@ -489,17 +499,18 @@ function SudokuMode({ onExit, soundEnabled, animationsEnabled }: SudokuModeProps
       </div>
 
       <div className="sudoku-tools">
-        <button onClick={eraseSelected}><SudokuToolIcon kind="erase" /><strong>지우기</strong></button>
-        <button onClick={useHint} disabled={!grid.includes(0)}><SudokuToolIcon kind="hint" /><strong>힌트</strong></button>
-        <button onClick={replacePuzzle}><SudokuToolIcon kind="refresh" /><strong>새 퍼즐</strong></button>
+        <button onClick={eraseSelected}><SudokuToolIcon kind="erase" /><strong>{t('지우기', 'Erase')}</strong></button>
+        <button onClick={useHint} disabled={!grid.includes(0)}><SudokuToolIcon kind="hint" /><strong>{t('힌트', 'Hint')}</strong></button>
+        <button onClick={replacePuzzle}><SudokuToolIcon kind="refresh" /><strong>{t('새 퍼즐', 'New puzzle')}</strong></button>
       </div>
-      {storageWarning && <p className="settings-note warning" role="alert">진행 상황을 저장하지 못할 수 있어요.</p>}
+      {storageWarning && <p className="settings-note warning" role="alert">{t('진행 상황을 저장하지 못할 수 있어요.', 'Progress may not be saved.')}</p>}
     </main>
   );
 }
 
 function SudokuTopBar({ title, onBack }: { title: string; onBack: () => void }) {
-  return <header className="top-bar"><button className="icon-button" onClick={onBack} aria-label="학습 놀이터로 돌아가기">←</button><strong>{title}</strong><span /></header>;
+  const { t } = useLocale();
+  return <header className="top-bar"><button className="icon-button" onClick={onBack} aria-label={t('학습 놀이터로 돌아가기', 'Return to Learning Playground')}>←</button><strong>{title}</strong><span /></header>;
 }
 
 function SudokuConfetti() {

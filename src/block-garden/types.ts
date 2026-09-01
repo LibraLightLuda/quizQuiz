@@ -37,6 +37,8 @@ export interface GardenGame {
   tray: Array<GardenPiece | null>;
   /** The first piece that will appear when the current tray is exhausted. */
   nextPiece?: GardenPiece | null;
+  /** Shape ids from the current/previous tray, used to avoid repetitive refills. */
+  recentShapeIds?: string[];
   mode?: GardenMode;
   dailyDate?: string;
   dailyTargetLines?: number;

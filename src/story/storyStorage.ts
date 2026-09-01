@@ -50,8 +50,9 @@ const isProgress = (value: unknown): value is StoryProgress => {
   if (progress.schemaVersion !== 1 || !story || progress.level !== story.level
     || !['reading', 'activity', 'recall'].includes(progress.screen ?? '')
     || !isNonNegativeInteger(progress.pageIndex) || progress.pageIndex! >= story.scenes.length
-    || !isNonNegativeInteger(progress.activityIndex) || progress.activityIndex! >= story.activities.length
-    || !Array.isArray(progress.activities) || progress.activities.length !== story.activities.length
+    || !isNonNegativeInteger(progress.activityIndex) || !Array.isArray(progress.activities)
+    || progress.activityIndex! >= progress.activities.length || progress.activities.length !== 3
+    || new Set(progress.activities.map((activity) => activity.activityId)).size !== progress.activities.length
     || !progress.activities.every((activity) => isActivityState(activity, progress))) return false;
   if (typeof progress.id !== 'string' || !progress.id.trim() || typeof progress.daily !== 'boolean'
     || typeof progress.elapsedMs !== 'number' || !Number.isFinite(progress.elapsedMs) || progress.elapsedMs < 0

@@ -23,12 +23,23 @@ interface ActivityContext {
 type ActivityWord = KoreanWord | EnglishWord;
 
 const activityFor = (context: ActivityContext): LanguageActivityKind => {
-  if (context.lessonPhase === 'welcome') return 'picture-link';
-  if (context.lessonPhase === 'story') return 'sentence-complete';
-  if (context.lessonPhase === 'review') return 'word-build';
-  const soundCount = context.recentSignatures.filter((signature) => signature.startsWith('activity:sound-match:')).length;
-  const buildCount = context.recentSignatures.filter((signature) => signature.startsWith('activity:word-build:')).length;
-  return soundCount <= buildCount ? 'sound-match' : 'word-build';
+  const weights: Record<LanguageActivityKind, number> = context.lessonPhase === 'welcome'
+    ? { 'picture-link': 5, 'sound-match': 3, 'word-build': 1, 'sentence-complete': 1 }
+    : context.lessonPhase === 'story'
+      ? { 'picture-link': 2, 'sound-match': 1, 'word-build': 2, 'sentence-complete': 5 }
+      : context.lessonPhase === 'review'
+        ? { 'picture-link': 1, 'sound-match': 2, 'word-build': 5, 'sentence-complete': 2 }
+        : { 'picture-link': 2, 'sound-match': 3, 'word-build': 3, 'sentence-complete': 2 };
+  const kinds = Object.keys(weights) as LanguageActivityKind[];
+  // A five-question adventure should expose every activity type before repeating one.
+  // Looking back three questions still keeps the next choice random while guaranteeing
+  // that any four consecutive activities contain all four kinds.
+  const recentlyUsed = new Set(context.recentSignatures.slice(-3).flatMap((signature) =>
+    kinds.filter((kind) => signature.startsWith(`activity:${kind}:`))));
+  const fresh = kinds.filter((kind) => !recentlyUsed.has(kind));
+  const candidates = fresh.length ? fresh : kinds;
+  const weighted = candidates.flatMap((kind) => Array.from({ length: weights[kind] }, () => kind));
+  return pick(context.random, weighted);
 };
 
 const chooseWord = (context: ActivityContext): { target: ActivityWord; source: readonly ActivityWord[] } => {

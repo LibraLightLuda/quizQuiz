@@ -26,7 +26,7 @@ describe('빈칸 정원 저장', () => {
   });
 
   it('게임오버 기록을 한 번 반영하고 진행판을 지운다', () => {
-    const game = createGardenGame(new SeededRandom(5));
+    const game = createGardenGame(new SeededRandom(5), new Date('2026-08-30T00:00:00.000Z'));
     game.score = 420;
     game.clearedLines = 9;
     game.status = 'game-over';

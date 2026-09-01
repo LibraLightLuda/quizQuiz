@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { playSuccessSound, unlockAudio } from '../services/soundService';
 import { SudokuCompleteVisual, SudokuRuleVisual, SudokuToolIcon, type SudokuRuleFocus } from './SudokuVisuals';
+import { useLocale } from '../i18n/LocaleContext';
 
 interface SudokuTutorialProps {
   onBack: () => void;
@@ -49,11 +50,12 @@ const tutorialSteps: TutorialStep[] = [
 ];
 
 function SudokuTutorial({ onBack, onStartBeginner, soundEnabled }: SudokuTutorialProps) {
+  const { t } = useLocale();
   const [stepIndex, setStepIndex] = useState(0);
   const [solved, setSolved] = useState(false);
   const [tried, setTried] = useState<number[]>([]);
   const [lastTried, setLastTried] = useState<number | null>(null);
-  const [message, setMessage] = useState('노란 빈칸에 들어갈 숫자를 골라보세요.');
+  const [message, setMessage] = useState(() => t('노란 빈칸에 들어갈 숫자를 골라보세요.', 'Choose the number for the yellow empty cell.'));
   const step = tutorialSteps[stepIndex];
   const board = solution.map((value, index) => index === step.targetIndex && !solved ? 0 : value);
   const targetRow = Math.floor(step.targetIndex / 4);
@@ -82,14 +84,14 @@ function SudokuTutorial({ onBack, onStartBeginner, soundEnabled }: SudokuTutoria
     setSolved(false);
     setTried([]);
     setLastTried(null);
-    setMessage('노란 빈칸에 들어갈 숫자를 골라보세요.');
+    setMessage(t('노란 빈칸에 들어갈 숫자를 골라보세요.', 'Choose the number for the yellow empty cell.'));
   };
 
   return (
     <main className="screen sudoku-tutorial-screen">
       <header className="sudoku-tutorial-header">
-        <button className="icon-button" onClick={onBack} aria-label="스도쿠 단계 선택으로 돌아가기">←</button>
-        <div><small>스도쿠 규칙 연습</small><strong>{stepIndex + 1} / {tutorialSteps.length}단계</strong></div>
+        <button className="icon-button" onClick={onBack} aria-label={t('스도쿠 단계 선택으로 돌아가기', 'Return to Sudoku levels')}>←</button>
+        <div><small>{t('스도쿠 규칙 연습', 'Sudoku rule practice')}</small><strong>{stepIndex + 1} / {tutorialSteps.length} {t('단계', 'steps')}</strong></div>
         <span aria-hidden="true">🎓</span>
       </header>
       <div className="sudoku-tutorial-progress" aria-hidden="true"><span style={{ width: `${((stepIndex + (solved ? 1 : 0)) / tutorialSteps.length) * 100}%` }} /></div>
@@ -102,10 +104,10 @@ function SudokuTutorial({ onBack, onStartBeginner, soundEnabled }: SudokuTutoria
 
       <SudokuRuleVisual focus={step.focus} />
 
-      <div className="tutorial-rule-pills" aria-label="스도쿠의 세 가지 규칙">
-        <span className={step.focus === 'row' || step.focus === 'all' ? 'active' : ''}>↔ 가로</span>
-        <span className={step.focus === 'column' || step.focus === 'all' ? 'active' : ''}>↕ 세로</span>
-        <span className={step.focus === 'box' || step.focus === 'all' ? 'active' : ''}>▦ 상자</span>
+      <div className="tutorial-rule-pills" aria-label={t('스도쿠의 세 가지 규칙', 'Three Sudoku rules')}>
+        <span className={step.focus === 'row' || step.focus === 'all' ? 'active' : ''}>↔ {t('가로', 'Row')}</span>
+        <span className={step.focus === 'column' || step.focus === 'all' ? 'active' : ''}>↕ {t('세로', 'Column')}</span>
+        <span className={step.focus === 'box' || step.focus === 'all' ? 'active' : ''}>▦ {t('상자', 'Box')}</span>
       </div>
 
       <div className="tutorial-board-wrap">
@@ -136,18 +138,18 @@ function SudokuTutorial({ onBack, onStartBeginner, soundEnabled }: SudokuTutoria
         </div>
       )}
 
-      {solved && !complete && <button className="primary-button tutorial-next" onClick={next}>다음 규칙 배우기</button>}
+      {solved && !complete && <button className="primary-button tutorial-next" onClick={next}>{t('다음 규칙 배우기', 'Learn the next rule')}</button>}
       {complete && (
         <section className="tutorial-complete">
-          <SudokuCompleteVisual /><h2>이제 스도쿠 준비 완료!</h2>
-          <p>빈칸마다 가로, 세로, 굵은 선 상자를 확인하면 돼요. 답을 찍기보다 들어갈 수 없는 숫자부터 하나씩 지워보세요.</p>
+          <SudokuCompleteVisual /><h2>{t('이제 스도쿠 준비 완료!', 'Ready for Sudoku!')}</h2>
+          <p>{t('빈칸마다 가로, 세로, 굵은 선 상자를 확인하면 돼요. 답을 찍기보다 들어갈 수 없는 숫자부터 하나씩 지워보세요.', 'For every empty cell, check its row, column, and bold box. Eliminate numbers that cannot fit instead of guessing.')}</p>
           <div className="tutorial-tool-guide" aria-label="스도쿠 도구 사용법">
             <div><SudokuToolIcon kind="erase" /><span><strong>지우기</strong><small>내가 넣은 숫자만 지워요</small></span></div>
             <div><SudokuToolIcon kind="hint" /><span><strong>힌트</strong><small>막힐 때 한 칸을 도와줘요</small></span></div>
             <div><SudokuToolIcon kind="refresh" /><span><strong>새 퍼즐</strong><small>확인한 뒤 새 판을 열어요</small></span></div>
           </div>
-          <button className="primary-button" onClick={onStartBeginner}>첫걸음 4×4 시작하기</button>
-          <button className="secondary-button" onClick={onBack}>난이도 고르기</button>
+          <button className="primary-button" onClick={onStartBeginner}>{t('첫걸음 4×4 시작하기', 'Start beginner 4×4')}</button>
+          <button className="secondary-button" onClick={onBack}>{t('난이도 고르기', 'Choose difficulty')}</button>
         </section>
       )}
       <aside className="tutorial-remember"><strong>꼭 기억해요</strong><span>4×4는 1~4와 2×2 상자, 6×6은 1~6과 2×3 상자, 9×9는 1~9와 3×3 상자를 사용해요. 처음부터 있는 숫자는 바꾸지 않고, 대각선은 확인하지 않아요.</span></aside>

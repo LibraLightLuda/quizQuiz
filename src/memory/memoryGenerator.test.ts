@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateStars, createMemoryProgress, layoutSignature } from './memoryGenerator';
+import { calculateStars, createMemoryProgress, layoutSignature, memoryContentSignature } from './memoryGenerator';
 
 describe('학습형 기억력 카드 생성', () => {
   it('같은 그림이 아니라 의미가 연결된 고유한 쌍을 만든다', () => {
@@ -41,6 +41,15 @@ describe('학습형 기억력 카드 생성', () => {
     const avoided = createMemoryProgress('mixed', 'growing', 'daily-2026-08-14', false, undefined, [layoutSignature(first.cards)]);
     expect(layoutSignature(same.cards)).toBe(layoutSignature(first.cards));
     expect(layoutSignature(avoided.cards)).not.toBe(layoutSignature(first.cards));
+  });
+
+  it('카드 배치가 아니라 같은 카드 구성 자체도 최근 문제에서 피한다', () => {
+    const first = createMemoryProgress('english', 'focus', 'content-seed');
+    const avoided = createMemoryProgress(
+      'english', 'focus', 'content-seed', false, undefined, [], [memoryContentSignature(first.cards)]
+    );
+    expect(memoryContentSignature(avoided.cards)).not.toBe(memoryContentSignature(first.cards));
+    expect(avoided.cards.every((card) => !card.wordId || card.wordId.startsWith('en-hard-'))).toBe(true);
   });
 
   it('시도 횟수에 따라 별을 1~3개 준다', () => {

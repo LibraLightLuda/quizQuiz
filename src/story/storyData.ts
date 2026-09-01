@@ -84,6 +84,26 @@ const makeStory = (input: {
       evidenceRequired
     };
   };
+  const sceneChoice = (suffix: string, sceneIndex: number, prompt: string, kind: StoryActivityKind) => {
+    const correctScene = scenes[sceneIndex];
+    const optionScenes = [correctScene, ...scenes.filter((scene) => scene.id !== correctScene.id)].slice(0, 4);
+    const options = optionScenes.map((scene, index) => ({ id: `${input.id}-${suffix}-option-${index + 1}`, label: scene.text }));
+    return {
+      id: `${input.id}-${suffix}`,
+      type: 'choice' as const,
+      kind,
+      prompt,
+      options,
+      correctOptionId: options[0].id,
+      hint: sceneIndex === 0 ? '이야기가 시작된 첫 장면을 떠올려 보세요.' : '이야기의 마지막 장면을 떠올려 보세요.',
+      explanation: correctScene.text,
+      evidenceSceneId: correctScene.id,
+      evidenceRequired: input.level === 'thinker'
+    };
+  };
+  const shortSequenceSceneIds = scenes.length <= 3
+    ? scenes.map((scene) => scene.id)
+    : [scenes[0], scenes[Math.floor((scenes.length - 1) / 2)], scenes.at(-1)!].map((scene) => scene.id);
   return {
     id: input.id, title: input.title, level: input.level, theme: input.theme,
     cover: input.cover, summary: input.summary, scenes,
@@ -96,7 +116,16 @@ const makeStory = (input: {
         hint: '처음에 있었던 일을 먼저 찾아보세요.',
         explanation: '이야기의 처음, 가운데, 끝을 차례로 떠올리면 순서를 찾을 수 있어요.'
       },
-      choice('thinking', input.thinking, input.level === 'thinker')
+      choice('thinking', input.thinking, input.level === 'thinker'),
+      sceneChoice('opening', 0, '이야기에서 가장 먼저 일어난 일은 무엇인가요?', 'detail'),
+      sceneChoice('ending', scenes.length - 1, '이야기의 마지막에는 어떤 일이 있었나요?', 'prediction'),
+      {
+        id: `${input.id}-short-sequence`, type: 'sequence', kind: 'sequence',
+        prompt: '중요한 세 장면을 이야기 순서대로 놓아 보세요.',
+        sceneIds: shortSequenceSceneIds,
+        hint: '처음 장면과 마지막 장면부터 찾아보세요.',
+        explanation: '이야기의 중요한 흐름을 차례대로 잘 찾았어요.'
+      }
     ]
   };
 };
@@ -263,7 +292,7 @@ export const validateStories = (values: readonly Story[] = stories): string[] =>
     if (!STORY_LEVELS.includes(story.level)) errors.push(`${story.id}: 잘못된 단계`);
     const expectedScenes = story.level === 'sprout' ? 3 : story.level === 'step' ? 4 : story.level === 'explorer' ? 5 : 6;
     if (story.scenes.length !== expectedScenes) errors.push(`${story.id}: 장면 수 ${story.scenes.length}/${expectedScenes}`);
-    if (story.activities.length !== 3) errors.push(`${story.id}: 활동은 3개여야 함`);
+    if (story.activities.length < 6) errors.push(`${story.id}: 활동 풀은 6개 이상이어야 함`);
     const sceneIds = new Set(story.scenes.map((scene) => scene.id));
     if (sceneIds.size !== story.scenes.length) errors.push(`${story.id}: 장면 ID 중복`);
     story.scenes.forEach((scene) => {
@@ -273,7 +302,7 @@ export const validateStories = (values: readonly Story[] = stories): string[] =>
     });
     story.activities.forEach((activity) => {
       if (activity.type === 'sequence') {
-        if (activity.sceneIds.length !== story.scenes.length || activity.sceneIds.some((id) => !sceneIds.has(id))) {
+        if (activity.sceneIds.length < 3 || activity.sceneIds.some((id) => !sceneIds.has(id))) {
           errors.push(`${activity.id}: 순서 장면 오류`);
         }
       } else {
